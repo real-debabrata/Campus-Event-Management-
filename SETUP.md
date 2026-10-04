@@ -35,3 +35,10 @@ GitHub only runs workflows from a folder named ".github/workflows". Dot-folders 
 3. In the file name box at the top, change the path from "github/workflows/build-apk.yml" to ".github/workflows/build-apk.yml" (add the dot in front of github).
 4. Click Commit changes.
 Then the Actions tab will show "Build APK" and "Deploy web version".
+
+## Public payment links (update)
+1. Firestore > Rules: paste the new firestore.rules and Publish (required, the old rules block payment pages).
+2. Replace/add in www/: app2.js, sync.js, pay.html (and firebase-config.js if you set PAY_BASE).
+3. Run "Deploy web version" so pay.html goes live, then rebuild the APK.
+4. In the app: Event > Payments > Create a payment link > copy or share the link. Payers need no account.
+5. Old payment forms made before this update have no public page. Delete and recreate them.
