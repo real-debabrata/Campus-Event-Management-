@@ -41,9 +41,12 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 #um .uh{padding:10px 12px;border-bottom:1px solid var(--line);margin-bottom:4px}#um .uh b,#um .uh span{display:block}#um .uh span{color:var(--mute);font-size:12px}
 #um button{display:flex;justify-content:space-between;width:100%;border:0;background:none;color:var(--ink);font:inherit;padding:10px 12px;border-radius:9px;cursor:pointer;text-align:left}#um button:hover{background:var(--bg)}#um .dg{color:var(--bad)}#um small{color:var(--mute)}
 #tp{top:calc(62px + env(safe-area-inset-top,0px))!important;border-radius:14px!important}
-#vs,#vb{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(8,12,30,.55);backdrop-filter:blur(4px);padding:16px}
-#vs .box,#vb .box{background:var(--card);border-radius:18px;padding:22px;width:min(380px,100%);box-shadow:0 24px 70px rgba(0,0,0,.45)}
+#vs,#vb,#js{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(8,12,30,.55);backdrop-filter:blur(4px);padding:16px}
+#vs .box,#vb .box,#js .box{background:var(--card);border-radius:18px;padding:22px;width:min(380px,100%);box-shadow:0 24px 70px rgba(0,0,0,.45)}
 #ub{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;padding:8px 14px;background:linear-gradient(135deg,#4f6bff,#9b5cff);color:#fff;font-size:14px}#ub button{border:0;border-radius:8px;padding:4px 10px;font:inherit;font-weight:700;cursor:pointer}
+#jt{display:flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:8px 14px;background:linear-gradient(135deg,#1a73e8,#0b57d0);color:#fff;font:inherit;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 14px -4px rgba(26,115,232,.7);transition:.15s}#jt:hover{filter:brightness(1.1)}#jt:active{transform:scale(.97)}
+#js input{text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:20px;font-weight:700}#js .btn:not(.ghost){background:#1a73e8}#jmsg{color:var(--bad);min-height:20px;font-size:13px;margin:8px 0 0}
+@media(max-width:400px){#jt span{display:none}#jt{padding:8px 10px}}
 `;document.head.append(css);
 
 // ---- menu bar (desktop top menu + mobile bottom tabs); buttons reuse the app's data-go navigation ----
@@ -55,7 +58,8 @@ const hdr=$('header'),nav=$('#nav'),tb=hdr.querySelector(':scope>button.btn');
 const mk=(t,id)=>{const e=document.createElement(t);if(id)e.id=id;return e};
 const mb=mk('div','mb'),bn=mk('div','bn'),av=mk('button','av'),um=mk('div','um'),vs=mk('div','vs'),vb=mk('div','vb'),ub=mk('div','ub');
 [um,vs,vb,ub].forEach(e=>e.classList.add('hid'));
-av.setAttribute('aria-label','Account menu');hdr.insertBefore(mb,nav);hdr.append(av);hdr.after(ub);document.body.append(bn,um,vs,vb);
+const jt=mk('button','jt'),js=mk('div','js');jt.dataset.u='join';jt.setAttribute('aria-label','Join team');jt.innerHTML=I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5M19 8v6M16 11h6"/>')+'<span>Join team</span>';jt.classList.add('hid');js.classList.add('hid');
+av.setAttribute('aria-label','Account menu');hdr.insertBefore(mb,nav);hdr.append(jt,av);hdr.after(ub);document.body.append(bn,um,vs,vb,js);
 function paint(){
  const h=[...nav.querySelectorAll('button')].map(b=>{const m=b.textContent.match(/^(.*?)\s*\((\d+)\)\s*$/),on=b.classList.contains('on'),g=b.dataset.go;
   return `<button data-go="${g}" class="${on?'on':''}" ${on?'aria-current="page"':''}>${IC[g]||''}<span>${m?m[1]:b.textContent}</span>${m?`<em>${m[2]}</em>`:''}</button>`}).join('');
@@ -98,7 +102,7 @@ function openUM(){
 }
 document.addEventListener('click',e=>{
  const t=e.target.closest('button');
- if(e.target===vs)vs.classList.add('hid');
+ if(e.target===vs)vs.classList.add('hid');if(e.target===js)js.classList.add('hid');
  if(!e.target.closest('#um')&&t!==av)um.classList.add('hid');
  if(t===av)return openUM();
  const u=t&&t.dataset.u;if(!u)return;um.classList.add('hid');
@@ -109,9 +113,33 @@ document.addEventListener('click',e=>{
  else if(u==='upd')update();
  else if(u==='dis'){localStorage.setItem('campus-ver-dismiss',String(CFG.latest));ub.classList.add('hid')}
  else if(u==='x')vs.classList.add('hid');
+ else if(u==='join'){js.innerHTML='<div class="box"><h3>Join a team</h3><p class="meta">Enter the 6-letter event code your organiser shared with you.</p><input id="jcode" maxlength="6" autocomplete="off" autocapitalize="characters" aria-label="Event code"><p id="jmsg" role="alert"></p><div class="row" style="margin-top:6px"><button class="btn" data-u="jgo">Join</button><button class="btn ghost" data-u="jx">Cancel</button></div></div>';js.classList.remove('hid');setTimeout(()=>{const i=$('#jcode');i&&i.focus()},50)}
+ else if(u==='jgo')joinEvent($('#jcode').value);
+ else if(u==='jx')js.classList.add('hid');
  else if(u==='out'&&window.firebase)firebase.auth().signOut();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){um.classList.add('hid');vs.classList.add('hid')}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){um.classList.add('hid');vs.classList.add('hid');js.classList.add('hid')}if(e.key==='Enter'&&e.target.id==='jcode')joinEvent(e.target.value)});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)check()});
+
+// ---- join by code. Works with the private rules (no read of the event is needed before joining) ----
+async function joinEvent(code){
+ code=(code||'').trim().toUpperCase();const m=js.classList.contains('hid')?null:$('#jmsg'),say=t=>m?m.textContent=t:toast(t);
+ if(!/^[A-Z]{6}$/.test(code))return say('Enter the 6-letter event code.');
+ const u=firebase.auth().currentUser;if(!u)return say('Sign in first.');
+ if(S.events.some(e=>e.id===code))return say('You are already in this event.');
+ try{await firebase.firestore().collection('events').doc(code).update({['members.'+u.uid]:{name:u.displayName||u.email,role:'member'},memberIds:firebase.firestore.FieldValue.arrayUnion(u.uid)});
+  js.classList.add('hid');$('#tp').classList.add('hid');toast('Joined the team');go('events')}
+ catch(x){say(x.code==='permission-denied'||x.code==='not-found'?'Invalid code. Check it with your organiser.':'Could not join: '+(x.message||x.code))}
+}
+// the old Join button inside the account panel uses the same private-safe flow
+document.addEventListener('click',e=>{if(e.target.closest('#jb')){e.stopPropagation();joinEvent(($('#jc')||{}).value)}},true);
+
+// ---- privacy on shared phones: show the join button only when signed in; drop another user's cached team events ----
+if(window.firebase&&firebase.apps.length)firebase.auth().onAuthStateChanged(u=>{
+ jt.classList.toggle('hid',!u);
+ const last=localStorage.getItem('campus-uid');
+ if(!u||(last&&last!==u.uid)){S.events=S.events.filter(e=>!e.cloud);const ok=new Set(S.events.map(e=>e.id));S.regs=S.regs.filter(r=>ok.has(r.eid));try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(x){}render()}
+ if(u)localStorage.setItem('campus-uid',u.uid);
+});
 gate();check();
 })();
