@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in | Campus Events</title>
+<style>
+:root{box-sizing:border-box;--ink:#14213d;--mute:#5b6678;--line:#d9e0ea;--bad:#c2331f}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;min-height:100vh;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#fff;display:grid;grid-template-columns:1.15fr 1fr;
+background:radial-gradient(900px 500px at 8% 0%,rgba(123,147,255,.45),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(255,122,184,.35),transparent 60%),linear-gradient(135deg,#0a0f2e,#16205c 60%,#2a1f6e)}
+.hero{padding:8vh 6vw;display:flex;flex-direction:column;justify-content:center;gap:16px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:22px}
+h1{font-size:clamp(30px,4.4vw,52px);line-height:1.05;margin:0}
+.hero p{color:#c9d2ff;max-width:46ch;margin:0}
+ul{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}
+li{color:#e6eaff;padding-left:26px;position:relative}
+li:before{content:"";position:absolute;left:0;top:6px;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#7b93ff,#ff7ab8)}
+.pane{display:flex;align-items:center;justify-content:center;padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom))}
+.glass{width:min(400px,100%);background:#fff;color:var(--ink);border-radius:20px;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+h2{margin:0;font-size:22px}.meta{color:var(--mute);font-size:13px;margin:4px 0 0}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#eef2f7;border-radius:10px;padding:4px;margin:14px 0 6px}
+.seg button{border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:8px;border-radius:8px;cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.2)}
+label{display:block;font-weight:600;font-size:13px;margin:12px 0 4px}
+input{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;color:var(--ink);background:#fff}
+input:focus-visible,button:focus-visible{outline:2px solid #4f6bff;outline-offset:2px}
+.pw{position:relative}.pw button{position:absolute;right:6px;top:5px;background:none;border:0;color:var(--mute);font-size:13px;font-weight:600;cursor:pointer;padding:6px}
+.go{width:100%;margin-top:12px;padding:12px;border:0;border-radius:10px;background:linear-gradient(135deg,#4f6bff,#9b5cff);color:#fff;font:inherit;font-weight:700;cursor:pointer}.go:disabled{opacity:.6}
+.lnk{background:none;border:0;color:#4f6bff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-top:10px}
+#msg{min-height:20px;font-size:13px;margin:10px 0 0;color:var(--bad)}#msg.ok{color:#12805c}
+.hide{display:none}
+@media(max-width:760px){body{grid-template-columns:1fr}.hero{padding:28px 22px 4px}ul,.hero p{display:none}}
+</style></head><body>
+<section class="hero">
+ <div class="brand"><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#lg)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg><span>Campus Events</span></div>
+ <h1>Run every campus event, together.</h1>
+ <p>One workspace for registrations, teams, tasks and payments, live on every phone.</p>
+ <ul><li>Roles for organizers, managers, treasurers and leads</li><li>Delegate tasks down to your own team</li><li>UPI payment links with UTR tracking</li></ul>
+</section>
+<section class="pane"><div class="glass">
+ <h2 id="ttl">Welcome back</h2><p class="meta" id="sub">Sign in to your workspace.</p>
+ <div class="seg"><button id="t-in" class="on">Sign in</button><button id="t-up">Create account</button></div>
+ <div id="nmw" class="hide"><label for="nm">Your name</label><input id="nm" autocomplete="name"></div>
+ <label for="em">Email</label><input id="em" type="email" autocomplete="email" inputmode="email">
+ <label for="pw">Password</label><div class="pw"><input id="pw" type="password" autocomplete="current-password"><button type="button" id="sh">Show</button></div>
+ <p id="msg" role="alert"></p>
+ <button class="go" id="go">Sign in</button>
+ <button class="lnk" id="fp">Forgot password?</button>
+ <p class="meta" style="margin-top:14px">The first sign-in needs internet. After that, the app keeps working offline.</p>
+</div></section>
+<script src="firebase-config.js"></script>
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-auth-compat.js"></script>
+<script>
+const $=id=>document.getElementById(id),C=window.FB_CONFIG||{};
+let mode='in',busy=false;
+const msg=(t,ok)=>{$('msg').textContent=t;$('msg').className=ok?'ok':''};
+if(!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey)){msg('Sign-in is not set up yet. Add your Firebase config to firebase-config.js.');$('go').disabled=true}
+else{
+ firebase.initializeApp(C);const auth=firebase.auth();
+ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+ auth.onAuthStateChanged(u=>{if(u&&!busy)location.replace('index.html')});
+ const friendly=e=>({'auth/invalid-credential':'Incorrect email or password.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account found for this email.','auth/email-already-in-use':'An account with this email already exists. Try signing in.','auth/weak-password':'Use a password with at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/network-request-failed':'No connection. Signing in needs internet the first time.','auth/too-many-requests':'Too many attempts. Wait a moment and try again.'}[e.code]||'Something went wrong. Please try again.');
+ const setMode=m=>{mode=m;const up=m==='up';$('t-in').className=up?'':'on';$('t-up').className=up?'on':'';$('nmw').className=up?'':'hide';
+  $('ttl').textContent=up?'Create your account':'Welcome back';$('sub').textContent=up?'Join in under a minute.':'Sign in to your workspace.';
+  $('go').textContent=up?'Create account':'Sign in';$('fp').className=up?'lnk hide':'lnk';$('pw').autocomplete=up?'new-password':'current-password';msg('')};
+ $('t-in').onclick=()=>setMode('in');$('t-up').onclick=()=>setMode('up');
+ $('sh').onclick=()=>{const p=$('pw'),s=p.type==='password';p.type=s?'text':'password';$('sh').textContent=s?'Hide':'Show'};
+ $('go').onclick=async()=>{
+  const em=$('em').value.trim(),pw=$('pw').value,nm=$('nm').value.trim();
+  if(!em||!pw)return msg('Enter your email and password.');
+  if(mode==='up'&&!nm)return msg('Enter your name.');
+  busy=true;$('go').disabled=true;msg('');
+  try{
+   if(mode==='in')await auth.signInWithEmailAndPassword(em,pw);
+   else{const c=await auth.createUserWithEmailAndPassword(em,pw);await c.user.updateProfile({displayName:nm})}
+   location.replace('index.html');
+  }catch(e){busy=false;$('go').disabled=false;msg(friendly(e))}
+ };
+ $('fp').onclick=async()=>{
+  const em=$('em').value.trim();if(!em)return msg('Type your email above first.');
+  try{await auth.sendPasswordResetEmail(em);msg('Password reset link sent to '+em+'.',true)}catch(e){msg(friendly(e))}
+ };
+ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('go').disabled)$('go').click()});
+}
+</script></body></html>

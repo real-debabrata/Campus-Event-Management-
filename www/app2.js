@@ -12,7 +12,11 @@ const assignees=e=>{let l=can(e,'tasks')?people(e):people(e).filter(p=>mineIds(e
 const st=document.createElement('style');
 st.textContent='.st-pending{color:var(--mute)}.st-verified{color:var(--ok);font-weight:700}.st-rejected{color:var(--bad);font-weight:700}td select{padding:4px 6px}';document.head.append(st);
 
-const row=(e,k,del)=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-mt="${e.id}|${k.id}" ${k.done?'checked':''} ${canTick(e,k)?'':'disabled'} aria-label="Mark done"><span style="flex:1;${k.done?'text-decoration:line-through;color:var(--mute)':''}">${esc(k.t)}</span><span class="meta">${esc(pn(e,k.who))}${k.due?', due '+k.due:''}</span>${del&&(can(e,'tasks')||k.by===me())?`<button class="btn ghost sm del" data-tkdel="${k.id}">Delete</button>`:''}</div>`;
+const row=(e,k,del)=>{
+ const own=assignees(e),ok=canTick(e,k);
+ const opts=(own.some(x=>x.id===k.who)?own:[{id:k.who,n:pn(e,k.who)},...own]).map(x=>`<option value="${x.id}" ${x.id===k.who?'selected':''}>${esc(x.n)}</option>`).join('');
+ const who=ok?`<select data-ra="${e.id}|${k.id}" aria-label="Assigned to" style="max-width:150px;padding:4px 6px">${opts}</select>`:`<span class="meta">${esc(pn(e,k.who))}</span>`;
+ return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-mt="${e.id}|${k.id}" ${k.done?'checked':''} ${ok?'':'disabled'} aria-label="Mark done"><span style="flex:1;min-width:120px;${k.done?'text-decoration:line-through;color:var(--mute)':''}">${esc(k.t)}</span>${who}<span class="meta">${k.due?'due '+k.due:''}</span>${del&&(can(e,'tasks')||k.by===me())?`<button class="btn ghost sm del" data-tkdel="${k.id}">Delete</button>`:''}</div>`};
 window.mineCount=()=>{let n=0;S.events.forEach(e=>{const ids=mineIds(e);n+=(e.tasks||[]).filter(k=>!k.done&&ids.includes(k.who)).length});return n?' ('+n+')':''};
 window.mine=()=>{
  const b=S.events.map(e=>{const ids=mineIds(e),ts=(e.tasks||[]).filter(k=>ids.includes(k.who));return ts.length?`<div class="card"><h3>${esc(e.name)}</h3>${ts.map(k=>row(e,k,0)).join('')}</div>`:''}).join('');
@@ -30,16 +34,18 @@ window.tasksV2=function(e){
  ${can(e,'write')?`<form class="row tk2" data-gid="${g.id}" style="margin-top:10px"><input name="t" required placeholder="New task" style="flex:2;min-width:140px"><select name="w" style="flex:1;min-width:120px">${opts}</select><input name="d" type="date" style="flex:1;min-width:130px"><button class="btn sm" type="submit">Add task</button></form>`:''}</div>`}).join('')||'<div class="empty">No task groups yet.</div>'}`;
 };
 window.peopleV=function(e){
- const mr=myRole(e),asg=mr==='owner'?['manager','treasurer','lead','member','viewer']:['treasurer','lead','member','viewer'],acc=people(e).filter(p=>p.acct);
- const sel=p=>can(e,'roles')&&p.id!==me()&&p.r!=='owner'&&(mr==='owner'||p.r!=='manager')?`<select data-role="${p.id}" aria-label="Role">${asg.map(r=>`<option value="${r}" ${p.r===r?'selected':''}>${LBL[r]}</option>`).join('')}</select>`:(LBL[p.r]||p.r);
- const subs=id=>(e.team||[]).filter(m=>m.boss===id).length;
- const roles=e.cloud?`<div class="card"><h3>Members and roles (${acc.length})</h3><p class="meta">Everyone who joins with the event code appears here and in every assign list.</p><div class="tbl"><table><tr><th>Name</th><th>Role</th><th>Subordinates</th></tr>${acc.map(p=>`<tr><td>${esc(p.n)}${p.id===me()?' (you)':''}</td><td>${sel(p)}</td><td>${subs(p.id)}</td></tr>`).join('')}</table></div>
- <details style="margin-top:10px"><summary class="meta">What each role can do</summary><p class="meta">Organizer: everything, including deleting the event.<br>Manager: edit the event, manage people and roles, tasks and payments.<br>Treasurer: verify payments, plus everything a member can do.<br>Team lead: create task groups, assign to anyone, check in attendees.<br>Member: tick their own tasks, add subordinates, assign tasks to themselves and them, create payment forms.<br>Viewer: read only.</p></details></div>`:'<div class="card"><h3>Members and roles</h3><p class="meta">Tap Share with team above to invite members with a code. Joined members then appear here with roles.</p></div>';
- const boss=can(e,'people')?`<div><label>Reports to</label><select name="b"><option value="">Nobody (top level)</option>${people(e).map(p=>`<option value="${p.id}">${esc(p.n)}</option>`).join('')}</select></div>`:'';
- const add=can(e,'write')?`<div class="card"><h3>${can(e,'people')?'Add a team member':'Add a subordinate'}</h3><form id="mbf" class="two"><div><label>Name *</label><input name="n" required></div><div><label>Title</label><input name="r" placeholder="Volunteer, Designer"></div><div><label>Phone</label><input name="p"></div>${boss}<div style="align-self:end"><button class="btn" type="submit">Add</button></div></form></div>`:'';
- const l=e.team||[];
- const list=`<div class="card"><h3>Team members and subordinates (${l.length})</h3>${l.length?`<div class="tbl"><table><tr><th>Name</th><th>Title</th><th>Reports to</th><th>Tasks</th><th></th></tr>${l.map(m=>{const t=e.tasks.filter(k=>k.who===m.id);return `<tr><td>${esc(m.n)}</td><td>${esc(m.r)}</td><td>${esc(m.boss?pn(e,m.boss):'-')}</td><td>${t.filter(k=>k.done).length}/${t.length}</td><td>${can(e,'people')||m.boss===me()?`<button class="btn ghost sm del" data-tmdel="${m.id}">Remove</button>`:''}</td></tr>`}).join('')}</table></div>`:'<p class="meta">None yet.</p>'}</div>`;
- return roles+add+list+teamsV(e);
+ const mr=myRole(e),asg=mr==='owner'?['manager','treasurer','lead','member','viewer']:['treasurer','lead','member','viewer'];
+ const canRole=p=>can(e,'roles')&&p.id!==me()&&p.r!=='owner'&&(mr==='owner'||p.r!=='manager');
+ const sel=p=>canRole(p)?`<select data-role="${p.id}" aria-label="Role">${asg.map(r=>`<option value="${r}" ${p.r===r?'selected':''}>${LBL[r]}</option>`).join('')}</select>`:(LBL[p.r]||esc(p.r||'Member'));
+ const all=people(e);
+ const tr=p=>{const t=e.tasks.filter(k=>k.who===p.id);
+  const act=p.acct?(canRole(p)?`<button class="btn ghost sm del" data-rmm="${p.id}">Remove</button>`:''):(can(e,'people')||p.boss===me()?`<button class="btn ghost sm del" data-tmdel="${p.id}">Remove</button>`:'');
+  return `<tr><td>${esc(p.n)}${p.id===me()?' (you)':''}</td><td>${p.acct?sel(p):esc(p.r||'Member')}</td><td>${p.acct?'-':esc(p.boss?pn(e,p.boss):'-')}</td><td>${t.filter(k=>k.done).length}/${t.length}</td><td>${act}</td></tr>`};
+ const team=`<div class="card"><h3>Team members (${all.length})</h3><p class="meta">${e.cloud?'Everyone who joins with the event code is added here automatically and appears in the task assign list.':'Tap Share with team above to invite members. They will appear here automatically.'}</p>${all.length?`<div class="tbl"><table><tr><th>Name</th><th>Role / title</th><th>Reports to</th><th>Tasks</th><th></th></tr>${all.map(tr).join('')}</table></div>`:'<p class="meta">No one yet.</p>'}
+ <details style="margin-top:10px"><summary class="meta">What each role can do</summary><p class="meta">Organizer: everything, including deleting the event.<br>Manager: edit the event, manage people and roles, tasks and payments.<br>Treasurer: verify payments, plus everything a member can do.<br>Team lead: create task groups, assign to anyone, check in attendees.<br>Member: tick their own tasks, add subordinates, assign tasks to themselves and them, create payment links.<br>Viewer: read only.</p></details></div>`;
+ const boss=can(e,'people')?`<div><label>Reports to</label><select name="b"><option value="">Nobody (top level)</option>${all.map(p=>`<option value="${p.id}">${esc(p.n)}</option>`).join('')}</select></div>`:'';
+ const add=can(e,'write')?`<div class="card"><h3>${can(e,'people')?'Add a team member':'Add a subordinate'}</h3><p class="meta">For people without the app, such as volunteers.</p><form id="mbf" class="two"><div><label>Name *</label><input name="n" required></div><div><label>Title</label><input name="r" placeholder="Volunteer, Designer"></div><div><label>Phone</label><input name="p"></div>${boss}<div style="align-self:end"><button class="btn" type="submit">Add</button></div></form></div>`:'';
+ return team+add+teamsV(e);
 };
 const ST={pending:'Pending',verified:'Verified',rejected:'Rejected'};
 const payBase=()=>{const c=window.PAY_BASE;if(c)return c.replace(/\/?$/,'/');if(/^https?:/.test(location.protocol)&&!/^(localhost|127\.)/.test(location.hostname))return location.origin+location.pathname.replace(/[^/]*$/,'');try{return localStorage.getItem('pay-base')||''}catch(x){return ''}};
@@ -63,6 +69,7 @@ window.payV2=function(e){
 document.addEventListener('click',x=>{
  const t=x.target.closest('button');if(!t)return;const D=t.dataset,E=cur();
  if(D.tm!==undefined){V.tm=D.tm==='1';render()}
+ else if(D.rmm&&E){if(confirm('Remove this member from the event?'))window.rmMember(E.id,D.rmm)}
  else if(D.shl){if(navigator.share)navigator.share({title:D.t,url:D.shl}).catch(()=>{});else{try{navigator.clipboard.writeText(D.shl);toast('Link copied')}catch(q){}}}
  else if(D.act&&E){const k=D.act;
   if(k[0]==='s'){const p=D.id.split('|');window.subAct(p[0],p[1],k)}
@@ -73,6 +80,7 @@ document.addEventListener('click',x=>{
 document.addEventListener('change',x=>{
  const t=x.target;
  if(t.dataset.mt){const [eid,tid]=t.dataset.mt.split('|'),ev1=S.events.find(q=>q.id===eid),k=ev1&&ev1.tasks.find(q=>q.id===tid);if(k&&canTick(ev1,k)){k.done=t.checked;sv()}}
+ else if(t.dataset.ra){const q=t.dataset.ra.split('|'),ev1=S.events.find(z=>z.id===q[0]),k=ev1&&ev1.tasks.find(z=>z.id===q[1]);if(k&&canTick(ev1,k)&&assignees(ev1).some(a=>a.id===t.value)){k.who=t.value;sv()}else render()}
  else if(t.dataset.role)window.setRole(cur().id,t.dataset.role,t.value);
 });
 document.addEventListener('submit',x=>{

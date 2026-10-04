@@ -143,6 +143,7 @@ async function join(code){
  catch(x){err(x)}
 }
 
+window.rmMember=(id,uid)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members)return;delete e.members[uid];e.tasks.forEach(k=>{if(k.who===uid)k.who=''});save();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(uid)}).catch(err)};
 window.setRole=(id,uid,role)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members||!e.members[uid])return;e.members[uid].role=role;persist();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid+'.role']:role}).catch(err)};
 window.SUBS=window.SUBS||{};const subUn={};
 window.pubForm=(f,e)=>{if(db&&U)db.collection('payforms').doc(f.id).set({eid:e.id,evName:e.name,title:f.title,amt:f.amt||0,upi:f.upi,payee:f.payee,note:f.note||'',by:U.uid,byName:f.byName||'',at:f.at}).catch(err)};
@@ -175,19 +176,7 @@ function panel(){
  <div class="row" style="margin-top:12px"><button class="btn ghost sm" id="clr">Clear updates</button><button class="btn ghost sm del" id="so">Sign out</button></div>`;
 }
 let AM='in';
-function authUI(force){
- let a=document.getElementById('au');if(a&&!force)return;if(a)a.remove();
- a=document.createElement('div');a.id='au';const up=AM==='up';
- a.innerHTML=`<div class="hero"><div class="brand"><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#lg)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg><span>Campus Events</span></div>
- <h1>Run every campus event, together.</h1><p>One workspace for registrations, teams, tasks and payments, live on every phone.</p>
- <ul><li>Roles for organizers, managers, treasurers and leads</li><li>Delegate tasks down to your own team</li><li>UPI payment forms with UTR tracking</li></ul></div>
- <div class="pane"><div class="glass"><h2>${up?'Create your account':'Welcome back'}</h2><p class="meta">${up?'Join in under a minute.':'Sign in to your workspace.'}</p>
- <div class="seg"><button data-m="in" class="${up?'':'on'}">Sign in</button><button data-m="up" class="${up?'on':''}">Create account</button></div>
- <label style="${up?'':'display:none'}">Your name</label><input id="an" autocomplete="name" style="${up?'':'display:none'}"><label>Email</label><input id="ae" type="email" autocomplete="email"><label>Password</label><input id="ap" type="password" autocomplete="${up?'new-password':'current-password'}">
- <p id="am" class="meta" style="color:var(--bad);min-height:18px"></p>
- <button class="btn go" id="go">${up?'Create account':'Sign in'}</button><div style="text-align:center;margin-top:10px"><button class="btn ghost sm" id="off">Continue offline</button></div></div></div>`;
- document.body.append(a);
-}
+function authUI(){location.replace('login.html')}
 document.addEventListener('click',async e=>{
  const t=e.target.closest('button');if(!t)return;
  const g=id=>document.getElementById(id);
@@ -212,12 +201,13 @@ document.addEventListener('change',e=>{
 });
 badge();
 
+if(!ready)document.documentElement.classList.remove('gate');
 if(ready){
  firebase.initializeApp(C);db=firebase.firestore();
  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
  firebase.auth().onAuthStateChanged(u=>{
   U=u;window.MYUID=u?u.uid:'';window.MYNAME=u?(u.displayName||u.email.split('@')[0]):'';
-  if(u){const a=document.getElementById('au');if(a)a.remove();askPerm();listen();render()}
+  if(u){document.documentElement.classList.remove('gate');askPerm();listen();render()}
   else{if(unsub)unsub();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}
  });
 }

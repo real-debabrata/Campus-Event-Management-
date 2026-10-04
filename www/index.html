@@ -44,7 +44,7 @@ input[type=checkbox]{width:auto}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:9}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:4px 12px;font:inherit;font-size:13px;cursor:pointer}.chip.on{background:var(--ink);color:var(--bg)}
 .qr{background:#fff;padding:8px;display:inline-block;border-radius:8px}.qr svg{display:block;max-width:100%;height:auto}
-</style><script src="qrcode.js"></script></head><body>
+</style><script src="qrcode.js"></script><style>.gate body{visibility:hidden}</style><script>document.documentElement.className="gate"</script></head><body>
 <header><h1 style="display:flex;align-items:center;gap:8px"><svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#lg2)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg>Campus Events</h1><nav id="nav"></nav></header>
 <main id="app"></main>
 <script>
