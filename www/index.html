@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="fonts.css">
 <title>Campus Events</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
@@ -9,8 +10,8 @@
 :root[data-theme="dark"]{--bg:#0e1424;--card:#171f35;--ink:#e8ecf6;--mute:#9aa6bd;--line:#2a3552;--acc:#7b93ff;--accink:#0e1424;--ok:#4cd6a0;--bad:#ff8a78}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*:before,*:after{box-sizing:inherit}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'DM Sans',system-ui,sans-serif}
-h1,h2,h3{font-family:'Bricolage Grotesque',system-ui,sans-serif;margin:0;line-height:1.15}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+h1,h2,h3{font-family:'Poppins',system-ui,sans-serif;margin:0;line-height:1.15}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
 header h1{font-size:20px;margin-right:auto}
 nav{display:flex;gap:4px;flex-wrap:wrap}
@@ -23,7 +24,7 @@ main{max-width:980px;margin:0 auto;padding:20px 16px 60px}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
-.stat b{font:800 28px 'Bricolage Grotesque',sans-serif;display:block}.stat span{color:var(--mute);font-size:13px}
+.stat b{font:800 28px 'Poppins',sans-serif;display:block}.stat span{color:var(--mute);font-size:13px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
 .ev{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--tc);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
 .ev h3{font-size:18px}.tag{font-size:12px;font-weight:700;color:var(--tc)}
