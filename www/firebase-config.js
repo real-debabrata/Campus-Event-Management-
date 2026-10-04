@@ -9,4 +9,4 @@ window.FB_CONFIG = {
 };
 // Optional: the address where this site is hosted, used to build payment links in the Android app.
 // Example: "https://yourname.github.io/your-repo/"  (leave empty to enter it inside the app)
-window.PAY_BASE = "";
+window.PAY_BASE = "https://cem.deba.indevs.in/";
