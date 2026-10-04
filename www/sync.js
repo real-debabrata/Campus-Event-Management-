@@ -5,14 +5,16 @@ const LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){retu
 let P=Object.assign({tasks:1,people:1,money:1,event:1,ntfy:0},LS('campus-prefs',{}));
 let N=LS('campus-notes',[]);
 let U=null,db,unsub,applying=false;const sent={},owners={};
-const KEYS=['info','team','groups','tasks','teams','don','pay','regs'];
+const KEYS=['info','team','groups','tasks','teams','don','pay','regs','forms','payments'],MAPK=['forms','payments'];
+const arr=o=>Array.isArray(o)?o:Object.values(o||{}).sort((a,b)=>(a.at||0)-(b.at||0));
+const toMap=a=>Object.fromEntries((a||[]).map(x=>[x.id,x]));
 const clean=o=>JSON.parse(JSON.stringify(o));
 const me=()=>((U&&(U.displayName||U.email.split('@')[0]))||'').toLowerCase();
 const err=x=>toast(x.code==='permission-denied'?'No permission. Check the Firestore rules.':'Sync problem: '+(x.message||x.code));
 const persist=()=>{try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(e){}};
 
 const st=document.createElement('style');
-st.textContent='#tp{position:fixed;right:10px;top:calc(60px + env(safe-area-inset-top,0px));width:min(360px,94vw);max-height:78vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.25)}#au{position:fixed;inset:0;background:var(--bg);z-index:30;display:flex;align-items:center;justify-content:center;padding:20px}#au .card{width:min(380px,100%)}.hid{display:none!important}';
+st.textContent='#tp{position:fixed;right:10px;top:calc(60px + env(safe-area-inset-top,0px));width:min(360px,94vw);max-height:78vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.25)}#au{position:fixed;inset:0;z-index:30}#au{display:grid;grid-template-columns:1.15fr 1fr;color:#fff;overflow:auto;background:radial-gradient(900px 500px at 8% 0%,rgba(123,147,255,.45),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(255,122,184,.35),transparent 60%),linear-gradient(135deg,#0a0f2e,#16205c 60%,#2a1f6e)}#au .hero{padding:8vh 6vw;display:flex;flex-direction:column;justify-content:center;gap:16px}#au .brand{display:flex;align-items:center;gap:12px;font:800 22px Bricolage Grotesque,system-ui,sans-serif}#au h1{font-size:clamp(30px,4.4vw,52px);line-height:1.05}#au .hero p{color:#c9d2ff;max-width:46ch;margin:0}#au ul{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}#au li{color:#e6eaff;padding-left:26px;position:relative}#au li:before{content:"";position:absolute;left:0;top:6px;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#7b93ff,#ff7ab8)}#au .pane{display:flex;align-items:center;justify-content:center;padding:20px}#au .glass{width:min(400px,100%);background:var(--card);color:var(--ink);border-radius:20px;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.45)}#au .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:10px;padding:4px;margin:14px 0 6px}#au .seg button{border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:8px;border-radius:8px;cursor:pointer}#au .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.2)}#au .go{width:100%;padding:12px;background:linear-gradient(135deg,#4f6bff,#9b5cff);color:#fff;border-radius:10px}@media(max-width:760px){#au{grid-template-columns:1fr}#au .hero{padding:28px 22px 6px}#au ul,#au .hero p{display:none}}.hid{display:none!important}';
 document.head.append(st);
 
 // ---------- notifications ----------
@@ -38,7 +40,7 @@ function notify(list){
 function snapOf(e){
  const o={info:{name:e.name,type:e.type,date:e.date,time:e.time,venue:e.venue,cap:e.cap,desc:e.desc,fields:e.fields},
   team:e.team||[],groups:e.groups||[],tasks:e.tasks||[],teams:e.teams||[],don:e.don||[],pay:e.pay||{upi:'',payee:'',fee:0},
-  regs:S.regs.filter(r=>r.eid===e.id)};
+  regs:S.regs.filter(r=>r.eid===e.id),forms:e.forms||[],payments:e.payments||[],members:e.members||{}};
  return clean(o);
 }
 const parts=e=>{const o=snapOf(e),r={};KEYS.forEach(k=>r[k]=JSON.stringify(o[k]));return r};
@@ -47,16 +49,20 @@ function diff(o,n,who){
  const nm=id=>((n.team.find(m=>m.id===id)||{}).n||'').toLowerCase();
  const nr=added(o.regs,n.regs);
  if(nr.length)out.push({cat:'people',text:nr.length+' new registration'+(nr.length>1?'s':'')+': '+nr.slice(0,3).map(r=>r.name).join(', ')});
- added(o.tasks,n.tasks).forEach(t=>{const mine=who&&nm(t.who)===who;out.push({cat:'tasks',me:mine,text:(mine?'Task assigned to you: ':'New task: ')+t.t})});
+ added(o.tasks,n.tasks).forEach(t=>{const mine=t.who===window.MYUID||(who&&nm(t.who)===who);out.push({cat:'tasks',me:mine,text:(mine?'Task assigned to you: ':'New task: ')+t.t})});
  n.tasks.forEach(t=>{const p=o.tasks.find(y=>y.id===t.id);if(!p)return;
   if(t.done&&!p.done)out.push({cat:'tasks',text:'Task done: '+t.t});
-  if(t.who!==p.who&&who&&nm(t.who)===who)out.push({cat:'tasks',me:true,text:'Task assigned to you: '+t.t})});
+  if(t.who!==p.who&&(t.who===window.MYUID||(who&&nm(t.who)===who)))out.push({cat:'tasks',me:true,text:'Task assigned to you: '+t.t})});
  added(o.groups,n.groups).forEach(g=>out.push({cat:'tasks',text:'New task group: '+g.n}));
  added(o.team,n.team).forEach(m=>out.push({cat:'people',text:m.n+' joined the core team as '+m.r}));
  added(o.teams,n.teams).forEach(t=>out.push({cat:'people',text:'New team: '+t.n}));
  added(o.don,n.don).forEach(x=>out.push({cat:'money',text:'Donation of ₹'+x.a+' from '+x.n}));
  const np=n.regs.filter(r=>{const p=o.regs.find(y=>y.id===r.id);return p&&r.paid&&!p.paid}).length;
  if(np)out.push({cat:'money',text:np+' fee payment'+(np>1?'s':'')+' recorded'});
+ const om=o.members||{},nmem=n.members||{};
+ Object.keys(nmem).filter(k=>!om[k]).forEach(k=>out.push({cat:'people',text:nmem[k].name+' joined the event'}));
+ Object.keys(nmem).forEach(k=>{if(om[k]&&om[k].role!==nmem[k].role&&k===window.MYUID)out.push({cat:'people',me:true,text:'Your role is now '+nmem[k].role})});
+ added(o.payments||[],n.payments||[]).forEach(p=>out.push({cat:'money',text:'Payment of ₹'+p.a+' from '+p.n+' submitted'}));
  const a=o.info,b=n.info;
  if(a.name!==b.name||a.date!==b.date||a.time!==b.time||a.venue!==b.venue)out.push({cat:'event',text:'Event details changed'});
  return out;
@@ -68,7 +74,7 @@ function apply(id,d){
  let e=S.events.find(x=>x.id===id);const old=e?snapOf(e):null;
  if(!e){e={id};S.events.push(e)}
  Object.assign(e,d.info||{},{team:d.team||[],groups:d.groups||[],tasks:d.tasks||[],teams:d.teams||[],don:d.don||[],
-  pay:d.pay||{upi:'',payee:'',fee:0},cloud:1,owner:d.owner,ntfy:d.ntfy||'',members:d.members||{}});
+  pay:d.pay||{upi:'',payee:'',fee:0},forms:arr(d.forms),payments:arr(d.payments),cloud:1,owner:d.owner,ntfy:d.ntfy||'',members:d.members||{}});
  S.regs=S.regs.filter(r=>r.eid!==id).concat((d.regs||[]).map(r=>Object.assign({},r,{eid:id})));
  owners[id]=d.owner;sent[id]=parts(e);return old;
 }
@@ -82,13 +88,13 @@ function listen(){
    const old=apply(id,d);
    if(old&&!first&&!c.doc.metadata.hasPendingWrites)diff(old,snapOf(S.events.find(e=>e.id===id)),me()).forEach(m=>msgs.push(Object.assign(m,{n:d.info.name})));
   });
-  first=false;persist();render();if(msgs.length)notify(msgs);
+  first=false;persist();render();watchSubs();if(msgs.length)notify(msgs);
  },err);
 }
 
 // ---------- push local changes ----------
 let tm;
-window.onSave=()=>{if(!U)return;clearTimeout(tm);tm=setTimeout(flush,500)};
+window.onSave=()=>{if(!U)return;clearTimeout(tm);tm=setTimeout(()=>{flush();watchSubs()},500)};
 function flush(){
  Object.keys(sent).forEach(id=>{
   if(S.events.some(e=>e.id===id))return;
@@ -98,11 +104,11 @@ function flush(){
  });
  S.events.filter(e=>e.cloud&&sent[e.id]).forEach(e=>{
   const cur=parts(e),old=sent[e.id],upd={};
-  KEYS.forEach(k=>{if(cur[k]!==old[k])upd[k]=JSON.parse(cur[k])});
+  KEYS.forEach(k=>{if(cur[k]===old[k])return;if(MAPK.includes(k)){const a=toMap(JSON.parse(old[k])),b=toMap(JSON.parse(cur[k]));for(const i in b)if(JSON.stringify(b[i])!==JSON.stringify(a[i]))upd[k+'.'+i]=b[i];for(const i in a)if(!b[i])upd[k+'.'+i]=firebase.firestore.FieldValue.delete()}else upd[k]=JSON.parse(cur[k])});
   if(!Object.keys(upd).length)return;
   if(P.ntfy&&e.ntfy){
    const o={};KEYS.forEach(k=>o[k]=JSON.parse(old[k]));
-   const msg=diff(o,snapOf(e),'').map(m=>m.text).join('; ');
+   const nn=snapOf(e);o.members=nn.members;const msg=diff(o,nn,'').map(m=>m.text).join('; ');
    if(msg)fetch('https://ntfy.sh/'+e.ntfy,{method:'POST',body:e.name+' - '+msg}).catch(()=>{});
   }
   sent[e.id]=cur;
@@ -122,8 +128,8 @@ async function share(id){
  let code;for(let i=0;i<5;i++){code=rnd(6);const g=await db.collection('events').doc(code).get().catch(()=>null);if(g&&!g.exists)break}
  const regs=S.regs.filter(r=>r.eid===id);
  S.regs.forEach(r=>{if(r.eid===id)r.eid=code});
- e.id=code;e.cloud=1;e.owner=U.uid;e.ntfy='campus-'+code+'-'+rnd(8).toLowerCase();e.members={[U.uid]:{name:U.displayName||U.email,role:'organizer'}};
- const o=snapOf(e);
+ e.id=code;e.cloud=1;e.owner=U.uid;e.ntfy='campus-'+code+'-'+rnd(8).toLowerCase();e.members={[U.uid]:{name:U.displayName||U.email,role:'owner'}};
+ const o=snapOf(e);o.forms=toMap(o.forms);o.payments=toMap(o.payments);
  try{await db.collection('events').doc(code).set(Object.assign(o,{owner:U.uid,ntfy:e.ntfy,members:e.members,memberIds:[U.uid]}));
   sent[code]=parts(e);owners[code]=U.uid;V.eid=code;persist();render();toast('Shared. Code: '+code)}
  catch(x){e.id=id;e.cloud=0;S.regs.forEach(r=>{if(r.eid===code)r.eid=id});err(x)}
@@ -137,6 +143,23 @@ async function join(code){
  catch(x){err(x)}
 }
 
+window.setRole=(id,uid,role)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members||!e.members[uid])return;e.members[uid].role=role;persist();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid+'.role']:role}).catch(err)};
+window.SUBS=window.SUBS||{};const subUn={};
+window.pubForm=(f,e)=>{if(db&&U)db.collection('payforms').doc(f.id).set({eid:e.id,evName:e.name,title:f.title,amt:f.amt||0,upi:f.upi,payee:f.payee,note:f.note||'',by:U.uid,byName:f.byName||'',at:f.at}).catch(err)};
+window.pubDel=id=>{if(db&&U)db.collection('payforms').doc(id).delete().catch(()=>{})};
+window.subAct=(fid,sid,a)=>{if(!db)return;const r=db.collection('payforms').doc(fid).collection('subs').doc(sid);(a==='sd'?r.delete():r.update({s:a==='sv'?'verified':'rejected'})).catch(err)};
+function watchSubs(){
+ if(!U||!window.can)return;const want={};
+ S.events.filter(e=>e.cloud).forEach(e=>(e.forms||[]).forEach(f=>{if(can(e,'pay')||f.by===U.uid)want[f.id]=f}));
+ Object.keys(subUn).forEach(id=>{if(!want[id]){subUn[id]();delete subUn[id];delete SUBS[id]}});
+ Object.keys(want).forEach(id=>{if(subUn[id])return;const f=want[id];let first=true;
+  subUn[id]=db.collection('payforms').doc(id).collection('subs').onSnapshot(sn=>{
+   const msgs=[];
+   if(!first)sn.docChanges().forEach(c=>{if(c.type==='added'&&!c.doc.metadata.hasPendingWrites){const d=c.doc.data();msgs.push({cat:'money',n:f.title,text:'Payment of ₹'+d.a+' from '+d.n+' submitted'})}});
+   first=false;SUBS[id]=sn.docs.map(d=>Object.assign({id:d.id},d.data()));render();if(msgs.length)notify(msgs);
+  },()=>{});
+ });
+}
 // ---------- UI ----------
 const hdr=document.querySelector('header');
 const tbtn=document.createElement('button');tbtn.className='btn ghost sm';tbtn.innerHTML='Team <span id="tb"></span>';hdr.append(tbtn);
@@ -151,13 +174,18 @@ function panel(){
  <h3 style="margin-top:14px">Recent updates</h3>${N.length?N.slice(0,15).map(n=>`<div class="meta" style="padding:4px 0;border-bottom:1px solid var(--line)">${esc(n.text)}</div>`).join(''):'<p class="meta">Nothing yet.</p>'}
  <div class="row" style="margin-top:12px"><button class="btn ghost sm" id="clr">Clear updates</button><button class="btn ghost sm del" id="so">Sign out</button></div>`;
 }
-function authUI(){
- let a=document.getElementById('au');if(a)return;
- a=document.createElement('div');a.id='au';
- a.innerHTML=`<div class="card"><h2>Campus Events</h2><p class="meta">Sign in to share events with your team.</p>
- <label>Your name (for new accounts)</label><input id="an"><label>Email</label><input id="ae" type="email"><label>Password</label><input id="ap" type="password">
- <p id="am" class="meta" style="color:var(--bad)"></p>
- <div class="row"><button class="btn" id="si">Sign in</button><button class="btn ghost" id="su">Create account</button><button class="btn ghost sm" id="off">Use offline</button></div></div>`;
+let AM='in';
+function authUI(force){
+ let a=document.getElementById('au');if(a&&!force)return;if(a)a.remove();
+ a=document.createElement('div');a.id='au';const up=AM==='up';
+ a.innerHTML=`<div class="hero"><div class="brand"><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#lg)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg><span>Campus Events</span></div>
+ <h1>Run every campus event, together.</h1><p>One workspace for registrations, teams, tasks and payments, live on every phone.</p>
+ <ul><li>Roles for organizers, managers, treasurers and leads</li><li>Delegate tasks down to your own team</li><li>UPI payment forms with UTR tracking</li></ul></div>
+ <div class="pane"><div class="glass"><h2>${up?'Create your account':'Welcome back'}</h2><p class="meta">${up?'Join in under a minute.':'Sign in to your workspace.'}</p>
+ <div class="seg"><button data-m="in" class="${up?'':'on'}">Sign in</button><button data-m="up" class="${up?'on':''}">Create account</button></div>
+ <label style="${up?'':'display:none'}">Your name</label><input id="an" autocomplete="name" style="${up?'':'display:none'}"><label>Email</label><input id="ae" type="email" autocomplete="email"><label>Password</label><input id="ap" type="password" autocomplete="${up?'new-password':'current-password'}">
+ <p id="am" class="meta" style="color:var(--bad);min-height:18px"></p>
+ <button class="btn go" id="go">${up?'Create account':'Sign in'}</button><div style="text-align:center;margin-top:10px"><button class="btn ghost sm" id="off">Continue offline</button></div></div></div>`;
  document.body.append(a);
 }
 document.addEventListener('click',async e=>{
@@ -170,9 +198,10 @@ document.addEventListener('click',async e=>{
  else if(t.id==='clr'){N=[];localStorage.setItem('campus-notes','[]');badge();panel()}
  else if(t.id==='so'){tp.classList.add('hid');firebase.auth().signOut()}
  else if(t.id==='off')g('au').remove();
- else if(t.id==='si'||t.id==='su'){
+ else if(t.dataset.m){AM=t.dataset.m;authUI(true)}
+ else if(t.id==='go'){
   const em=g('ae').value.trim(),pw=g('ap').value,nmv=g('an').value.trim();
-  try{if(t.id==='si')await firebase.auth().signInWithEmailAndPassword(em,pw);
+  try{if(AM==='in')await firebase.auth().signInWithEmailAndPassword(em,pw);
    else{const c=await firebase.auth().createUserWithEmailAndPassword(em,pw);await c.user.updateProfile({displayName:nmv||em.split('@')[0]})}}
   catch(x){g('am').textContent=x.message.replace('Firebase: ','')}
  }
@@ -187,9 +216,9 @@ if(ready){
  firebase.initializeApp(C);db=firebase.firestore();
  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
  firebase.auth().onAuthStateChanged(u=>{
-  U=u;
+  U=u;window.MYUID=u?u.uid:'';window.MYNAME=u?(u.displayName||u.email.split('@')[0]):'';
   if(u){const a=document.getElementById('au');if(a)a.remove();askPerm();listen();render()}
-  else{if(unsub)unsub();authUI()}
+  else{if(unsub)unsub();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}
  });
 }
 })();

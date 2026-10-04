@@ -45,7 +45,7 @@ input[type=checkbox]{width:auto}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:4px 12px;font:inherit;font-size:13px;cursor:pointer}.chip.on{background:var(--ink);color:var(--bg)}
 .qr{background:#fff;padding:8px;display:inline-block;border-radius:8px}.qr svg{display:block;max-width:100%;height:auto}
 </style><script src="qrcode.js"></script></head><body>
-<header><h1>Campus Events</h1><nav id="nav"></nav></header>
+<header><h1 style="display:flex;align-items:center;gap:8px"><svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#lg2)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg>Campus Events</h1><nav id="nav"></nav></header>
 <main id="app"></main>
 <script>
 const TYPES={Fest:'#d9482b',Seminar:'#2f4bd8',Webinar:'#0e8a8a',Workshop:'#b7791f',Cultural:'#b02a82',Sports:'#2e8b3d'};
@@ -70,7 +70,7 @@ if(!S.events.length){
  {id:'e4',name:'Intro to Git & GitHub',type:'Workshop',date:d(7),time:'14:00',venue:'Computer Lab 3',cap:40,desc:'Hands-on workshop. Bring your laptop.',fields:mk('Workshop')}];
  S.regs=[{id:'r1',eid:'e4',data:{},name:'Aarav Mehta',email:'',in:true,at:Date.now()},{id:'r2',eid:'e4',data:{},name:'Diya Nair',email:'',in:false,at:Date.now()},{id:'r3',eid:'e2',data:{},name:'Kabir Shah',email:'',in:false,at:Date.now()}];
 }
-const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
+const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.forms=e.forms||[];e.payments=e.payments||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
 S.events.forEach(ensure);
 let V={dt:'regs',qr:0,tab:'dash',eid:null,filter:'All',q:'',draft:null};
 const save=()=>{try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(e){}window.onSave&&window.onSave()};
@@ -79,13 +79,13 @@ const ev=id=>S.events.find(e=>e.id===id);
 const regsOf=id=>S.regs.filter(r=>r.eid===id);
 const fmt=e=>new Date(e.date+'T'+(e.time||'00:00')).toLocaleString([], {weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
 const go=(t,eid=null)=>{V.tab=t;V.eid=eid;if(t==='new'&&!V.draft)V.draft=newDraft();render();scrollTo(0,0)};
-function newDraft(){return{id:null,name:'',type:'Seminar',date:d(7),time:'10:00',venue:'',cap:100,desc:'',fields:mk('Seminar'),team:[],groups:[],tasks:[],teams:[],don:[],pay:{upi:'',payee:'',fee:0}}}
+function newDraft(){return{id:null,name:'',type:'Seminar',date:d(7),time:'10:00',venue:'',cap:100,desc:'',fields:mk('Seminar'),team:[],groups:[],tasks:[],teams:[],don:[],forms:[],payments:[],pay:{upi:'',payee:'',fee:0}}}
 
 function render(){
- const nav=[['dash','Dashboard'],['events','Events'],['new','New event']];
+ const nav=[['dash','Dashboard'],['events','Events'],['mine','My tasks'+(window.mineCount?mineCount():'')],['new','New event']];
  document.getElementById('nav').innerHTML=nav.map(n=>`<button class="${V.tab===n[0]||(V.tab==='detail'&&n[0]==='events')?'on':''}" data-go="${n[0]}">${n[1]}</button>`).join('');
  const a=document.getElementById('app');
- a.innerHTML=V.tab==='dash'?dash():V.tab==='events'?list():V.tab==='detail'?detail():form();
+ a.innerHTML=V.tab==='mine'?mine():V.tab==='dash'?dash():V.tab==='events'?list():V.tab==='detail'?detail():form();
 }
 function dash(){
  const tot=S.regs.length,ci=S.regs.filter(r=>r.in).length,cap=S.events.reduce((s,e)=>s+e.cap,0);
@@ -129,7 +129,7 @@ function detail(){
  <div class="card"><div class="row" style="justify-content:space-between"><h3>Attendees (${rs.length}/${e.cap})</h3><span class="meta">${rs.filter(r=>r.in).length} checked in</span></div>
  ${rs.length?`<div class="tbl"><table><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th>Status</th><th></th></tr>
  ${rs.map(r=>`<tr>${cols.map(c=>`<td>${esc(r.data[c.id]??(c===cols[0]?r.name:''))}</td>`).join('')}<td>${r.in?'<span class="in">Checked in</span>':'Registered'}${e.pay.fee?(r.paid?' · Paid':' · Unpaid'):''}</td>
- <td><button class="btn ghost sm" data-ci="${r.id}">${r.in?'Undo':'Check in'}</button> ${e.pay.fee?`<button class="btn ghost sm" data-paid="${r.id}">${r.paid?'Mark unpaid':'Mark paid'}</button> `:''}<button class="btn ghost sm del" data-rm="${r.id}">Remove</button></td></tr>`).join('')}</table></div>`:'<div class="empty">No registrations yet. Use the form above to add the first attendee.</div>'}</div>`;
+ <td>${can(e,'regs')?`<button class="btn ghost sm" data-ci="${r.id}">${r.in?'Undo':'Check in'}</button>`:''} ${e.pay.fee?`<button class="btn ghost sm" data-paid="${r.id}">${r.paid?'Mark unpaid':'Mark paid'}</button> `:''}${can(e,'event')?`<button class="btn ghost sm del" data-rm="${r.id}">Remove</button>`:''}</td></tr>`).join('')}</table></div>`:'<div class="empty">No registrations yet. Use the form above to add the first attendee.</div>'}</div>`;
 }
 function form(){
  const x=V.draft;
@@ -195,9 +195,9 @@ const head=e=>`<button class="btn ghost sm" data-go="events">Back to events</but
  <div class="card" style="margin-top:12px;border-left:6px solid ${TYPES[e.type]}">
  <span class="tag" style="color:${TYPES[e.type]}">${e.type}</span><h2>${esc(e.name)}</h2>
  <p class="meta">${fmt(e)} at ${esc(e.venue)}</p><p>${esc(e.desc)}</p>
- ${window.shareBar?shareBar(e):''}<div class="row"><button class="btn ghost sm" data-edit="${e.id}">Edit event</button><button class="btn ghost sm del" data-del="${e.id}">Delete event</button></div></div>`;
-const subtabs=()=>`<div class="chips">${[['regs','Attendees'],['team','Core team'],['tasks','Tasks'],['pay','Payments'],['teams','Teams']].map(t=>`<button class="chip ${V.dt===t[0]?'on':''}" data-dt="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-const section=e=>({team:teamV,tasks:tasksV,pay:payV,teams:teamsV})[V.dt](e);
+ ${window.shareBar?shareBar(e):''}<p class="meta">Your role: ${LBL[myRole(e)]}</p>${can(e,'event')?`<div class="row"><button class="btn ghost sm" data-edit="${e.id}">Edit event</button><button class="btn ghost sm del" data-del="${e.id}">${myRole(e)==='owner'?'Delete event':'Leave event'}</button></div>`:(e.cloud?`<div class="row"><button class="btn ghost sm del" data-del="${e.id}">Leave event</button></div>`:'')}</div>`;
+const subtabs=()=>`<div class="chips">${[['regs','Attendees'],['people','People'],['tasks','Tasks'],['pay','Payments']].map(t=>`<button class="chip ${V.dt===t[0]?'on':''}" data-dt="${t[0]}">${t[1]}</button>`).join('')}</div>`;
+const section=e=>({people:peopleV,tasks:tasksV2,pay:payV2})[V.dt==='team'||V.dt==='teams'?'people':V.dt](e);
 const nm=(e,id)=>(e.team.find(m=>m.id===id)||{}).n||'Unassigned';
 function teamV(e){
  return `<div class="card"><h3>Add core team member</h3><form id="tmf" class="two">
@@ -274,4 +274,5 @@ render();
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-firestore-compat.js"></script>
 <script src="sync.js"></script>
+<script src="app2.js"></script>
 </body></html>

@@ -7,3 +7,6 @@ window.FB_CONFIG = {
   messagingSenderId: "492698777947",
   appId: "1:492698777947:web:59c8dbfc741faf31eb427e"
 };
+// Optional: the address where this site is hosted, used to build payment links in the Android app.
+// Example: "https://yourname.github.io/your-repo/"  (leave empty to enter it inside the app)
+window.PAY_BASE = "";

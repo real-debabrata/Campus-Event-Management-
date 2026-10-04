@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Make a payment</title>
+<style>
+:root{box-sizing:border-box;--ink:#14213d;--mute:#5b6678;--line:#d9e0ea;--acc:#4f6bff}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;min-height:100vh;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#fff;padding:max(16px,env(safe-area-inset-top)) 14px max(24px,env(safe-area-inset-bottom));
+background:radial-gradient(800px 480px at 8% 0%,rgba(123,147,255,.45),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(255,122,184,.35),transparent 60%),linear-gradient(135deg,#0a0f2e,#16205c 60%,#2a1f6e)}
+main{max-width:440px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;margin:6px 0 16px}
+.card{background:#fff;color:var(--ink);border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.4);margin-bottom:14px}
+h1{font-size:22px;margin:0 0 4px}.meta{color:var(--mute);font-size:13px;margin:0}
+.step{display:flex;gap:10px;align-items:center;font-weight:700;margin:0 0 10px}.step i{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-style:normal;font-size:13px}
+.qr{text-align:center;margin:12px 0}.qr svg{max-width:240px;width:100%;height:auto;border:1px solid var(--line);border-radius:12px;padding:6px;background:#fff}
+.amt{font-size:30px;font-weight:800;text-align:center}
+.det{background:#f2f5fa;border-radius:12px;padding:10px 12px;margin:10px 0;font-size:14px}.det b{word-break:break-all}
+label{display:block;font-weight:600;font-size:13px;margin:12px 0 4px}
+input{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;color:var(--ink);background:#fff}
+input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:11px 14px;cursor:pointer}
+.go{width:100%;margin-top:16px;background:linear-gradient(135deg,#4f6bff,#9b5cff);color:#fff}.go:disabled{opacity:.6}
+.alt{background:#eef1fb;color:var(--ink);padding:8px 12px;font-size:13px}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.err{color:#c2331f;min-height:18px;font-size:13px;margin:8px 0 0}
+.ok{text-align:center}.ok b{font-size:44px;display:block;color:#12805c}
+</style></head><body>
+<main>
+<div class="brand"><svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#g)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg>Campus Events</div>
+<div id="root"><div class="card"><p class="meta">Loading payment page...</p></div></div>
+</main>
+<script src="firebase-config.js"></script>
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-firestore-compat.js"></script>
+<script src="qrcode.js"></script>
+<script>
+const $=id=>document.getElementById(id),root=$('root');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fid=new URLSearchParams(location.search).get('f'),C=window.FB_CONFIG||{};
+const fail=m=>{root.innerHTML='<div class="card"><h1>Payment page unavailable</h1><p class="meta">'+esc(m)+'</p></div>'};
+if(!fid||!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey))fail('This payment link is incomplete or not set up.');
+else{
+ firebase.initializeApp(C);const db=firebase.firestore();
+ db.collection('payforms').doc(fid).get().then(d=>d.exists?show(d.data()):fail('This payment link is no longer available.')).catch(()=>fail('Could not load this page. Check your connection and try again.'));
+}
+function show(f){
+ document.title='Pay: '+f.title;
+ const link='upi://pay?pa='+encodeURIComponent(f.upi)+'&pn='+encodeURIComponent(f.payee||'')+(f.amt?'&am='+f.amt:'')+'&cu=INR&tn='+encodeURIComponent(f.title);
+ let svg='';try{const q=qrcode(0,'M');q.addData(link);q.make();svg=q.createSvgTag(8,4)}catch(e){}
+ root.innerHTML=`<div class="card"><p class="meta">${esc(f.evName||'')}</p><h1>${esc(f.title)}</h1>${f.note?`<p class="meta">${esc(f.note)}</p>`:''}
+ <div class="amt">${f.amt?'₹'+f.amt:'Any amount'}</div>
+ <p class="step"><i>1</i> Pay with any UPI app</p>
+ <div class="qr" id="qr">${svg||'<p class="meta">QR unavailable. Use the UPI ID below.</p>'}</div>
+ <div class="row"><button class="alt" id="dl">Save QR image</button><button class="alt" id="cp">Copy UPI ID</button></div>
+ <div class="det">Pay to: <b>${esc(f.payee)}</b><br>UPI ID: <b>${esc(f.upi)}</b></div>
+ <p class="meta">Scan the QR from your UPI app, or save the image and choose it from your gallery inside the app.</p></div>
+ <div class="card" id="fc"><p class="step"><i>2</i> Come back and submit your details</p>
+ <label for="n">Your name</label><input id="n" autocomplete="name" maxlength="80">
+ <label for="a">Amount paid (₹)</label><input id="a" type="number" min="1" inputmode="decimal" value="${f.amt||''}">
+ <label for="u">UTR / reference / transaction number</label><input id="u" maxlength="40" autocapitalize="characters" autocomplete="off">
+ <p class="err" id="er"></p><button class="go" id="go">Submit payment details</button></div>`;
+ $('cp').onclick=()=>{try{navigator.clipboard.writeText(f.upi);$('cp').textContent='Copied'}catch(e){}};
+ $('dl').onclick=()=>{const el=document.querySelector('#qr svg');if(!el)return;
+  const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=c.height=640;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,640,640);x.drawImage(img,0,0,640,640);
+   const a=document.createElement('a');a.download='payment-qr.png';a.href=c.toDataURL('image/png');document.body.append(a);a.click();a.remove()};
+  img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(el))};
+ $('go').onclick=()=>{
+  const n=$('n').value.trim(),a=+$('a').value,u=$('u').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,''),er=$('er');
+  if(!n)return er.textContent='Please enter your name.';
+  if(!(a>0))return er.textContent='Please enter the amount you paid.';
+  if(u.length<6)return er.textContent='Enter the UTR or reference number from your payment (at least 6 characters).';
+  er.textContent='';$('go').disabled=true;
+  firebase.firestore().collection('payforms').doc(fid).collection('subs').doc(u).set({n,a,utr:u,s:'pending',at:Date.now()})
+   .then(()=>{$('fc').innerHTML=`<div class="ok"><b>✓</b><h1>Thank you, ${esc(n)}</h1><p class="meta">We received your details for ₹${a} (reference ${esc(u)}). The organizers will verify your payment.</p></div>`})
+   .catch(x=>{$('go').disabled=false;er.textContent=x.code==='permission-denied'?'This reference number was already submitted, or the details are not valid.':'Could not submit. Please try again.'});
+ };
+}
+</script></body></html>
