@@ -42,3 +42,8 @@ Then the Actions tab will show "Build APK" and "Deploy web version".
 3. Run "Deploy web version" so pay.html goes live, then rebuild the APK.
 4. In the app: Event > Payments > Create a payment link > copy or share the link. Payers need no account.
 5. Old payment forms made before this update have no public page. Delete and recreate them.
+
+## Sign-in page (update)
+- login.html is now a separate sign-in and sign-up page. The app (index.html) redirects there until you sign in.
+- Sign-in sticks on the device, so the app opens and works offline afterwards. The first sign-in needs internet.
+- Update these files in www/: index.html, sync.js, app2.js, and add login.html. Firestore rules are unchanged.
