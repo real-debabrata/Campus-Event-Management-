@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Campus Events</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef2f7;--card:#fff;--ink:#14213d;--mute:#5b6678;--line:#d9e0ea;--acc:#2f4bd8;--accink:#fff;--ok:#12805c;--bad:#c2331f}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1424;--card:#171f35;--ink:#e8ecf6;--mute:#9aa6bd;--line:#2a3552;--acc:#7b93ff;--accink:#0e1424;--ok:#4cd6a0;--bad:#ff8a78}}
+:root[data-theme="dark"]{--bg:#0e1424;--card:#171f35;--ink:#e8ecf6;--mute:#9aa6bd;--line:#2a3552;--acc:#7b93ff;--accink:#0e1424;--ok:#4cd6a0;--bad:#ff8a78}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'DM Sans',system-ui,sans-serif}
+h1,h2,h3{font-family:'Bricolage Grotesque',system-ui,sans-serif;margin:0;line-height:1.15}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+header h1{font-size:20px;margin-right:auto}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;color:var(--mute);font:inherit;font-weight:500;padding:8px 12px;border-radius:8px;cursor:pointer}
+nav button.on{background:var(--acc);color:var(--accink)}
+main{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+.btn{background:var(--acc);color:var(--accink);border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:700;cursor:pointer}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:5px 10px;font-size:13px}.btn.del{color:var(--bad)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat b{font:800 28px 'Bricolage Grotesque',sans-serif;display:block}.stat span{color:var(--mute);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.ev{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--tc);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.ev h3{font-size:18px}.tag{font-size:12px;font-weight:700;color:var(--tc)}
+.meta{color:var(--mute);font-size:13px}
+.bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--tc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+label{display:block;font-weight:500;font-size:13px;margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+input[type=checkbox]{width:auto}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.two{grid-template-columns:1fr}}
+.fld{display:grid;grid-template-columns:2fr 1fr auto auto;gap:6px;align-items:center;margin-bottom:6px}
+.fld input,.fld select{padding:6px 8px}
+.tbl{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);font-size:14px;white-space:nowrap}
+.in{color:var(--ok);font-weight:700}
+.empty{text-align:center;color:var(--mute);padding:30px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:9}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:4px 12px;font:inherit;font-size:13px;cursor:pointer}.chip.on{background:var(--ink);color:var(--bg)}
+.qr{background:#fff;padding:8px;display:inline-block;border-radius:8px}.qr svg{display:block;max-width:100%;height:auto}
+</style><script src="qrcode.js"></script></head><body>
+<header><h1>Campus Events</h1><nav id="nav"></nav></header>
+<main id="app"></main>
+<script>
+const TYPES={Fest:'#d9482b',Seminar:'#2f4bd8',Webinar:'#0e8a8a',Workshop:'#b7791f',Cultural:'#b02a82',Sports:'#2e8b3d'};
+const PRESETS={
+ Fest:[['Full name','text',1],['College ID','text',1],['Department','text',0],['Teams / events joining','text',0]],
+ Seminar:[['Full name','text',1],['College ID','text',1],['Year of study','select',0,'1st,2nd,3rd,4th']],
+ Webinar:[['Full name','text',1],['Email','text',1]],
+ Workshop:[['Full name','text',1],['College ID','text',1],['Laptop available','checkbox',0],['Experience level','select',1,'Beginner,Intermediate,Advanced']],
+ Cultural:[['Full name','text',1],['College ID','text',1],['Performing?','checkbox',0],['Act details','text',0]],
+ Sports:[['Full name','text',1],['College ID','text',1],['Team name','text',0],['T-shirt size','select',1,'S,M,L,XL']]};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const mk=p=>PRESETS[p].map(f=>({id:uid(),label:f[0],type:f[1],req:!!f[2],opts:f[3]||''}));
+const d=n=>{const x=new Date();x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
+let S={events:[],regs:[]};
+try{const r=localStorage.getItem('campus-events-v1');if(r)S=JSON.parse(r)}catch(e){}
+if(!S.events.length){
+ S.events=[
+ {id:'e1',name:'Ignite Tech Fest 2026',type:'Fest',date:d(12),time:'09:00',venue:'Main Auditorium',cap:300,desc:'Two days of hackathons, robotics and gaming.',fields:mk('Fest')},
+ {id:'e2',name:'Careers in AI Seminar',type:'Seminar',date:d(4),time:'11:00',venue:'Seminar Hall B',cap:120,desc:'Industry speakers on AI careers.',fields:mk('Seminar')},
+ {id:'e3',name:'Product Design Webinar',type:'Webinar',date:d(2),time:'17:00',venue:'Online (link sent by email)',cap:500,desc:'Live Q&A with a senior designer.',fields:mk('Webinar')},
+ {id:'e4',name:'Intro to Git & GitHub',type:'Workshop',date:d(7),time:'14:00',venue:'Computer Lab 3',cap:40,desc:'Hands-on workshop. Bring your laptop.',fields:mk('Workshop')}];
+ S.regs=[{id:'r1',eid:'e4',data:{},name:'Aarav Mehta',email:'',in:true,at:Date.now()},{id:'r2',eid:'e4',data:{},name:'Diya Nair',email:'',in:false,at:Date.now()},{id:'r3',eid:'e2',data:{},name:'Kabir Shah',email:'',in:false,at:Date.now()}];
+}
+const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
+S.events.forEach(ensure);
+let V={dt:'regs',qr:0,tab:'dash',eid:null,filter:'All',q:'',draft:null};
+const save=()=>{try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(e){}window.onSave&&window.onSave()};
+const toast=m=>{const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),1800)};
+const ev=id=>S.events.find(e=>e.id===id);
+const regsOf=id=>S.regs.filter(r=>r.eid===id);
+const fmt=e=>new Date(e.date+'T'+(e.time||'00:00')).toLocaleString([], {weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+const go=(t,eid=null)=>{V.tab=t;V.eid=eid;if(t==='new'&&!V.draft)V.draft=newDraft();render();scrollTo(0,0)};
+function newDraft(){return{id:null,name:'',type:'Seminar',date:d(7),time:'10:00',venue:'',cap:100,desc:'',fields:mk('Seminar'),team:[],groups:[],tasks:[],teams:[],don:[],pay:{upi:'',payee:'',fee:0}}}
+
+function render(){
+ const nav=[['dash','Dashboard'],['events','Events'],['new','New event']];
+ document.getElementById('nav').innerHTML=nav.map(n=>`<button class="${V.tab===n[0]||(V.tab==='detail'&&n[0]==='events')?'on':''}" data-go="${n[0]}">${n[1]}</button>`).join('');
+ const a=document.getElementById('app');
+ a.innerHTML=V.tab==='dash'?dash():V.tab==='events'?list():V.tab==='detail'?detail():form();
+}
+function dash(){
+ const tot=S.regs.length,ci=S.regs.filter(r=>r.in).length,cap=S.events.reduce((s,e)=>s+e.cap,0);
+ const up=[...S.events].filter(e=>e.date>=d(0)).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+ return `<div class="stats">
+ <div class="stat"><b>${S.events.length}</b><span>Events</span></div>
+ <div class="stat"><b>${tot}</b><span>Registrations</span></div>
+ <div class="stat"><b>${ci}</b><span>Checked in</span></div>
+ <div class="stat"><b>${cap?Math.round(tot/cap*100):0}%</b><span>Seats filled</span></div></div>
+ <h2 style="margin-bottom:12px">Coming up</h2>
+ ${up.length?`<div class="grid">${up.map(card).join('')}</div>`:'<div class="empty">No upcoming events. Create one from New event.</div>'}`;
+}
+function card(e){
+ const n=regsOf(e.id).length,p=Math.min(100,Math.round(n/e.cap*100));
+ return `<div class="ev" style="--tc:${TYPES[e.type]}"><span class="tag">${e.type}</span><h3>${esc(e.name)}</h3>
+ <div class="meta">${fmt(e)}<br>${esc(e.venue)}</div>
+ <div class="bar"><i style="width:${p}%"></i></div><div class="meta">${n} of ${e.cap} registered</div>
+ <div class="row"><button class="btn sm" data-open="${e.id}">Manage</button></div></div>`;
+}
+function list(){
+ const f=['All',...Object.keys(TYPES)];
+ const items=S.events.filter(e=>(V.filter==='All'||e.type===V.filter)&&e.name.toLowerCase().includes(V.q.toLowerCase())).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+ return `<div class="chips">${f.map(t=>`<button class="chip ${V.filter===t?'on':''}" data-f="${t}">${t}</button>`).join('')}</div>
+ <input id="q" placeholder="Search events" value="${esc(V.q)}" style="margin-bottom:14px">
+ ${items.length?`<div class="grid">${items.map(card).join('')}</div>`:'<div class="empty">No events match. Try another filter.</div>'}`;
+}
+function fieldInput(f){
+ const n=`f_${f.id}`,r=f.req?'required':'';
+ if(f.type==='checkbox')return `<label><input type="checkbox" name="${n}"> ${esc(f.label)}</label>`;
+ if(f.type==='select')return `<label>${esc(f.label)}${f.req?' *':''}</label><select name="${n}" ${r}><option value="">Select</option>${f.opts.split(',').map(o=>`<option>${esc(o.trim())}</option>`).join('')}</select>`;
+ return `<label>${esc(f.label)}${f.req?' *':''}</label><input name="${n}" ${r}>`;
+}
+function detail(){
+ const e=ev(V.eid);if(!e)return list();
+ if(V.dt!=='regs')return head(e)+subtabs()+section(e);
+ const rs=regsOf(e.id),full=rs.length>=e.cap;
+ const cols=e.fields.slice(0,3);
+ return `${head(e)}${subtabs()}
+ <div class="card"><h3>Register an attendee</h3>
+ ${full?'<p class="meta">This event is full.</p>':`<form id="reg" data-eid="${e.id}">${e.fields.map(fieldInput).join('')}<div style="margin-top:12px"><button class="btn" type="submit">Register</button></div></form>`}</div>
+ <div class="card"><div class="row" style="justify-content:space-between"><h3>Attendees (${rs.length}/${e.cap})</h3><span class="meta">${rs.filter(r=>r.in).length} checked in</span></div>
+ ${rs.length?`<div class="tbl"><table><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th>Status</th><th></th></tr>
+ ${rs.map(r=>`<tr>${cols.map(c=>`<td>${esc(r.data[c.id]??(c===cols[0]?r.name:''))}</td>`).join('')}<td>${r.in?'<span class="in">Checked in</span>':'Registered'}${e.pay.fee?(r.paid?' · Paid':' · Unpaid'):''}</td>
+ <td><button class="btn ghost sm" data-ci="${r.id}">${r.in?'Undo':'Check in'}</button> ${e.pay.fee?`<button class="btn ghost sm" data-paid="${r.id}">${r.paid?'Mark unpaid':'Mark paid'}</button> `:''}<button class="btn ghost sm del" data-rm="${r.id}">Remove</button></td></tr>`).join('')}</table></div>`:'<div class="empty">No registrations yet. Use the form above to add the first attendee.</div>'}</div>`;
+}
+function form(){
+ const x=V.draft;
+ return `<h2 style="margin-bottom:12px">${x.id?'Edit event':'Create an event'}</h2>
+ <form id="evf" class="card">
+ <label>Event name *</label><input name="name" required value="${esc(x.name)}">
+ <div class="two"><div><label>Type</label><select name="type">${Object.keys(TYPES).map(t=>`<option ${t===x.type?'selected':''}>${t}</option>`).join('')}</select></div>
+ <div><label>Capacity</label><input name="cap" type="number" min="1" value="${x.cap}"></div>
+ <div><label>Date</label><input name="date" type="date" required value="${x.date}"></div>
+ <div><label>Time</label><input name="time" type="time" value="${x.time}"></div></div>
+ <label>Venue or meeting link</label><input name="venue" value="${esc(x.venue)}">
+ <label>Description</label><textarea name="desc" rows="3">${esc(x.desc)}</textarea>
+ <h3 style="margin-top:20px">Registration form</h3>
+ <p class="meta">Pick a type to load a ready-made form, then add, remove or rename questions.</p>
+ <div class="row" style="margin-bottom:8px"><button type="button" class="btn ghost sm" data-preset="1">Load form for this type</button></div>
+ ${x.fields.map((f,i)=>`<div class="fld"><input data-fl="label" data-i="${i}" value="${esc(f.label)}" aria-label="Question">
+ <select data-fl="type" data-i="${i}" aria-label="Answer type">${['text','select','checkbox'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${{text:'Short text',select:'Dropdown',checkbox:'Tick box'}[t]}</option>`).join('')}</select>
+ <label style="margin:0"><input type="checkbox" data-fl="req" data-i="${i}" ${f.req?'checked':''}> Required</label>
+ <button type="button" class="btn ghost sm del" data-fx="${i}">Remove</button>
+ ${f.type==='select'?`<input style="grid-column:1/-1" data-fl="opts" data-i="${i}" placeholder="Options, separated by commas" value="${esc(f.opts)}">`:''}</div>`).join('')}
+ <button type="button" class="btn ghost sm" data-fadd="1">Add question</button>
+ <div class="row" style="margin-top:20px"><button class="btn" type="submit">${x.id?'Save changes':'Publish event'}</button><button type="button" class="btn ghost" data-go="events">Cancel</button></div></form>`;
+}
+function syncDraft(){
+ const f=document.getElementById('evf');if(!f)return;
+ const fd=new FormData(f);['name','type','date','time','venue','desc'].forEach(k=>V.draft[k]=fd.get(k));V.draft.cap=+fd.get('cap')||1;
+}
+document.addEventListener('click',e=>{
+ const t=e.target.closest('button');if(!t)return;const D=t.dataset;
+ if(D.go){if(D.go==='new')V.draft=newDraft();go(D.go)}
+ else if(D.open){V.dt='regs';go('detail',D.open)}
+ else if(D.f){V.filter=D.f;render()}
+ else if(D.ci){const r=S.regs.find(r=>r.id===D.ci);r.in=!r.in;save();render();toast(r.in?'Checked in':'Check-in undone')}
+ else if(D.rm){S.regs=S.regs.filter(r=>r.id!==D.rm);save();render();toast('Registration removed')}
+ else if(D.del){if(confirm('Delete this event and all its registrations?')){S.events=S.events.filter(x=>x.id!==D.del);S.regs=S.regs.filter(r=>r.eid!==D.del);save();go('events');toast('Event deleted')}}
+ else if(D.edit){V.draft=JSON.parse(JSON.stringify(ev(D.edit)));go('new')}
+ else if(D.preset){syncDraft();V.draft.fields=mk(V.draft.type);render()}
+ else if(D.fadd){syncDraft();V.draft.fields.push({id:uid(),label:'New question',type:'text',req:false,opts:''});render()}
+ else if(D.fx!==undefined){syncDraft();V.draft.fields.splice(+D.fx,1);render()}
+});
+document.addEventListener('change',e=>{
+ const t=e.target;
+ if(t.dataset.fl){const f=V.draft.fields[+t.dataset.i];const k=t.dataset.fl;f[k]=k==='req'?t.checked:t.value;if(k==='type'){syncDraft();render()}}
+});
+document.addEventListener('input',e=>{
+ if(e.target.id==='q'){V.q=e.target.value;const p=e.target.selectionStart;render();const q=document.getElementById('q');q.focus();q.setSelectionRange(p,p)}
+ else if(e.target.dataset.fl&&e.target.dataset.fl!=='req'&&e.target.tagName==='INPUT')V.draft.fields[+e.target.dataset.i][e.target.dataset.fl]=e.target.value;
+});
+document.addEventListener('submit',e=>{
+ e.preventDefault();const f=e.target;
+ if(f.id==='reg'){
+  const ev1=ev(f.dataset.eid),fd=new FormData(f),data={};
+  ev1.fields.forEach(q=>{data[q.id]=q.type==='checkbox'?(fd.get('f_'+q.id)?'Yes':'No'):fd.get('f_'+q.id)||''});
+  S.regs.push({id:uid(),eid:ev1.id,data,name:data[ev1.fields[0].id]||'Guest',in:false,at:Date.now()});
+  save();render();toast('Registered')}
+ else if(f.id==='evf'){
+  syncDraft();const x=V.draft;
+  if(x.id){S.events[S.events.findIndex(y=>y.id===x.id)]=x}else{x.id=uid();S.events.push(x)}
+  save();const id=x.id;V.draft=null;go('detail',id);toast('Published')}
+});
+const cur=()=>ev(V.eid),sv=()=>{save();render()};
+const head=e=>`<button class="btn ghost sm" data-go="events">Back to events</button>
+ <div class="card" style="margin-top:12px;border-left:6px solid ${TYPES[e.type]}">
+ <span class="tag" style="color:${TYPES[e.type]}">${e.type}</span><h2>${esc(e.name)}</h2>
+ <p class="meta">${fmt(e)} at ${esc(e.venue)}</p><p>${esc(e.desc)}</p>
+ ${window.shareBar?shareBar(e):''}<div class="row"><button class="btn ghost sm" data-edit="${e.id}">Edit event</button><button class="btn ghost sm del" data-del="${e.id}">Delete event</button></div></div>`;
+const subtabs=()=>`<div class="chips">${[['regs','Attendees'],['team','Core team'],['tasks','Tasks'],['pay','Payments'],['teams','Teams']].map(t=>`<button class="chip ${V.dt===t[0]?'on':''}" data-dt="${t[0]}">${t[1]}</button>`).join('')}</div>`;
+const section=e=>({team:teamV,tasks:tasksV,pay:payV,teams:teamsV})[V.dt](e);
+const nm=(e,id)=>(e.team.find(m=>m.id===id)||{}).n||'Unassigned';
+function teamV(e){
+ return `<div class="card"><h3>Add core team member</h3><form id="tmf" class="two">
+ <div><label>Name *</label><input name="n" required></div><div><label>Role</label><input name="r" list="roles" placeholder="Convenor, Treasurer"></div>
+ <div><label>Phone</label><input name="p"></div><div style="align-self:end"><button class="btn" type="submit">Add member</button></div></form>
+ <datalist id="roles">${['Convenor','Co-convenor','Treasurer','Coordinator','Volunteer','Design lead','Marketing lead','Logistics lead'].map(r=>`<option>${r}</option>`).join('')}</datalist></div>
+ <div class="card"><h3>Core team (${e.team.length})</h3>${e.team.length?`<div class="tbl"><table><tr><th>Name</th><th>Role</th><th>Phone</th><th>Tasks done</th><th></th></tr>
+ ${e.team.map(m=>{const t=e.tasks.filter(k=>k.who===m.id);return `<tr><td>${esc(m.n)}</td><td>${esc(m.r)}</td><td>${esc(m.p)}</td><td>${t.filter(k=>k.done).length}/${t.length}</td><td><button class="btn ghost sm del" data-tmdel="${m.id}">Remove</button></td></tr>`}).join('')}</table></div>`:'<div class="empty">No team yet. Add your convenor and leads above.</div>'}</div>`;
+}
+function tasksV(e){
+ const dn=e.tasks.filter(k=>k.done).length,p=e.tasks.length?Math.round(dn/e.tasks.length*100):0;
+ return `<div class="card"><div class="row" style="justify-content:space-between"><h3>Task groups</h3><span class="meta">${dn} of ${e.tasks.length} tasks done</span></div>
+ <div class="bar" style="margin:8px 0 12px"><i style="width:${p}%;background:var(--ok)"></i></div>
+ <form id="grf" class="row"><input name="n" required placeholder="Group name, e.g. Logistics" style="flex:1;min-width:160px"><button class="btn" type="submit">Add group</button><button type="button" class="btn ghost" data-grstd="1">Add standard groups</button></form></div>
+ ${e.groups.length?e.groups.map(g=>{const ts=e.tasks.filter(k=>k.gid===g.id);return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(g.n)}</h3><span class="meta">${ts.filter(k=>k.done).length}/${ts.length} done <button class="btn ghost sm del" data-grdel="${g.id}">Delete group</button></span></div>
+ ${ts.map(k=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-tk="${k.id}" ${k.done?'checked':''} aria-label="Mark done"><span style="flex:1;${k.done?'text-decoration:line-through;color:var(--mute)':''}">${esc(k.t)}</span><span class="meta">${esc(nm(e,k.who))}${k.due?', due '+k.due:''}</span><button class="btn ghost sm del" data-tkdel="${k.id}">Delete</button></div>`).join('')}
+ <form class="row tkf" data-gid="${g.id}" style="margin-top:10px"><input name="t" required placeholder="New task" style="flex:2;min-width:140px"><select name="w" style="flex:1;min-width:120px"><option value="">Assign to</option>${e.team.map(m=>`<option value="${m.id}">${esc(m.n)}</option>`).join('')}</select><input name="d" type="date" style="flex:1;min-width:130px"><button class="btn sm" type="submit">Add task</button></form></div>`}).join(''):'<div class="empty">No task groups yet. Add one above, or load the standard groups.</div>'}`;
+}
+const upiLink=(e,am)=>`upi://pay?pa=${encodeURIComponent(e.pay.upi)}&pn=${encodeURIComponent(e.pay.payee||e.name)}${am?'&am='+am:''}&cu=INR&tn=${encodeURIComponent(e.name)}`;
+const qrSvg=s=>{try{const q=qrcode(0,'M');q.addData(s);q.make();return `<div class="qr">${q.createSvgTag(5,4)}</div>`}catch(x){return '<p class="meta">The QR library did not load. Share the UPI ID instead.</p>'}};
+function payV(e){
+ const p=e.pay,rs=regsOf(e.id),np=rs.filter(r=>r.paid).length,fee=np*p.fee,pend=(rs.length-np)*p.fee,don=e.don.reduce((s,x)=>s+x.a,0);
+ const ok=/^[\w.\-]+@[\w]+$/.test(p.upi);
+ return `<div class="stats"><div class="stat"><b>₹${fee}</b><span>Fees collected</span></div><div class="stat"><b>₹${pend}</b><span>Fees pending</span></div><div class="stat"><b>₹${don}</b><span>Donations</span></div><div class="stat"><b>₹${fee+don}</b><span>Total raised</span></div></div>
+ <div class="card"><h3>Payment settings</h3><div class="two"><div><label>UPI ID</label><input data-pay="upi" value="${esc(p.upi)}" placeholder="club@okhdfcbank"></div>
+ <div><label>Payee name</label><input data-pay="payee" value="${esc(p.payee)}"></div><div><label>Registration fee in ₹ (0 for free)</label><input data-pay="fee" type="number" min="0" value="${p.fee}"></div></div></div>
+ ${ok?`<div class="grid">${p.fee?`<div class="card"><h3>Registration fee QR</h3><p class="meta">Fixed amount: ₹${p.fee}. Mark attendees as paid in the Attendees tab.</p>${qrSvg(upiLink(e,p.fee))}</div>`:''}
+ <div class="card"><h3>Donation QR</h3><form id="qrf" class="row" style="margin-bottom:8px"><input name="a" type="number" min="0" placeholder="Amount in ₹ (blank lets donor choose)" value="${V.qr||''}" style="flex:1"><button class="btn sm" type="submit">Generate</button></form>${qrSvg(upiLink(e,V.qr))}</div></div>`:'<div class="card empty">Enter a valid UPI ID above to generate payment QR codes.</div>'}
+ <div class="card"><h3>Record a donation</h3><form id="dnf" class="row"><input name="n" placeholder="Donor name" style="flex:2;min-width:140px"><input name="a" type="number" min="1" required placeholder="₹" style="flex:1;min-width:90px"><select name="m" style="flex:1;min-width:90px"><option>UPI</option><option>Cash</option></select><button class="btn" type="submit">Add</button></form>
+ ${e.don.length?`<div class="tbl"><table><tr><th>Donor</th><th>Amount</th><th>Mode</th><th></th></tr>${e.don.map(x=>`<tr><td>${esc(x.n)}</td><td>₹${x.a}</td><td>${x.m}</td><td><button class="btn ghost sm del" data-dondel="${x.id}">Delete</button></td></tr>`).join('')}</table></div>`:''}</div>`;
+}
+function teamsV(e){
+ const rs=regsOf(e.id),free=rs.filter(r=>!e.teams.some(t=>t.id===r.team));
+ return `<div class="card"><h3>Build participant teams</h3><p class="meta">Create teams for contests or group activities, then add registered attendees. ${free.length} not in a team.</p>
+ <form id="tnf" class="row"><input name="n" required placeholder="Team name" style="flex:1;min-width:160px"><button class="btn" type="submit">Create team</button></form>
+ <form id="atf" class="row" style="margin-top:10px"><label style="margin:0">Auto-build teams of</label><input name="s" type="number" min="2" value="4" style="width:80px"><button class="btn ghost" type="submit">Split unassigned attendees</button></form></div>
+ ${e.teams.length?`<div class="grid">${e.teams.map(t=>{const ms=rs.filter(r=>r.team===t.id);return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(t.n)}</h3><button class="btn ghost sm del" data-tdel="${t.id}">Delete</button></div>
+ ${ms.map(r=>`<div class="row" style="justify-content:space-between;padding:4px 0">${esc(r.name)}<button class="btn ghost sm" data-tmrm="${r.id}">Remove</button></div>`).join('')||'<p class="meta">No members yet.</p>'}
+ <select data-tmadd="${t.id}" style="margin-top:8px"><option value="">Add attendee</option>${free.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')}</select></div>`}).join('')}</div>`:'<div class="empty">No teams yet. Create one above or auto-build them.</div>'}`;
+}
+document.addEventListener('click',e=>{
+ const t=e.target.closest('button');if(!t)return;const D=t.dataset,E=cur();
+ if(D.dt){V.dt=D.dt;render()}
+ else if(D.paid){const r=S.regs.find(r=>r.id===D.paid);r.paid=!r.paid;sv()}
+ else if(D.tmdel){E.team=E.team.filter(m=>m.id!==D.tmdel);E.tasks.forEach(k=>{if(k.who===D.tmdel)k.who=''});sv()}
+ else if(D.grdel){E.groups=E.groups.filter(g=>g.id!==D.grdel);E.tasks=E.tasks.filter(k=>k.gid!==D.grdel);sv()}
+ else if(D.grstd){['Logistics','Marketing','Finance','Hospitality','Tech and AV'].forEach(n=>{if(!E.groups.some(g=>g.n===n))E.groups.push({id:uid(),n})});sv()}
+ else if(D.tkdel){E.tasks=E.tasks.filter(k=>k.id!==D.tkdel);sv()}
+ else if(D.dondel){E.don=E.don.filter(x=>x.id!==D.dondel);sv()}
+ else if(D.tdel){E.teams=E.teams.filter(x=>x.id!==D.tdel);S.regs.forEach(r=>{if(r.team===D.tdel)r.team=''});sv()}
+ else if(D.tmrm){S.regs.find(r=>r.id===D.tmrm).team='';sv()}
+});
+document.addEventListener('change',e=>{
+ const t=e.target,E=cur();
+ if(t.dataset.tk){E.tasks.find(k=>k.id===t.dataset.tk).done=t.checked;sv()}
+ else if(t.dataset.pay){const k=t.dataset.pay;E.pay[k]=k==='fee'?Math.max(0,+t.value||0):t.value.trim();sv()}
+ else if(t.dataset.tmadd&&t.value){S.regs.find(r=>r.id===t.value).team=t.dataset.tmadd;sv()}
+});
+document.addEventListener('submit',e=>{
+ const f=e.target,E=cur(),fd=new FormData(f);
+ if(f.id==='tmf'){E.team.push({id:uid(),n:fd.get('n').trim(),r:fd.get('r').trim()||'Member',p:fd.get('p').trim()});sv();toast('Member added')}
+ else if(f.id==='grf'){E.groups.push({id:uid(),n:fd.get('n').trim()});sv()}
+ else if(f.classList.contains('tkf')){E.tasks.push({id:uid(),gid:f.dataset.gid,t:fd.get('t').trim(),who:fd.get('w'),due:fd.get('d'),done:false});sv();toast('Task added')}
+ else if(f.id==='tnf'){E.teams.push({id:uid(),n:fd.get('n').trim()});sv()}
+ else if(f.id==='atf'){const n=Math.max(2,+fd.get('s')||4),pool=regsOf(E.id).filter(r=>!E.teams.some(t=>t.id===r.team)).sort(()=>Math.random()-.5);
+  for(let i=0;i<pool.length;i+=n){const t={id:uid(),n:'Team '+(E.teams.length+1)};E.teams.push(t);pool.slice(i,i+n).forEach(r=>r.team=t.id)}sv();toast('Teams built')}
+ else if(f.id==='dnf'){E.don.push({id:uid(),n:fd.get('n').trim()||'Anonymous',a:+fd.get('a')||0,m:fd.get('m')});sv();toast('Donation recorded')}
+ else if(f.id==='qrf'){V.qr=+fd.get('a')||0;render()}
+});
+render();
+</script>
+<script src="firebase-config.js"></script>
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-auth-compat.js"></script>
+<script src="vendor/firebase-firestore-compat.js"></script>
+<script src="sync.js"></script>
+</body></html>
