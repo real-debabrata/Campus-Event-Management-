@@ -62,14 +62,6 @@ const mk=p=>PRESETS[p].map(f=>({id:uid(),label:f[0],type:f[1],req:!!f[2],opts:f[
 const d=n=>{const x=new Date();x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
 let S={events:[],regs:[]};
 try{const r=localStorage.getItem('campus-events-v1');if(r)S=JSON.parse(r)}catch(e){}
-if(!S.events.length){
- S.events=[
- {id:'e1',name:'Ignite Tech Fest 2026',type:'Fest',date:d(12),time:'09:00',venue:'Main Auditorium',cap:300,desc:'Two days of hackathons, robotics and gaming.',fields:mk('Fest')},
- {id:'e2',name:'Careers in AI Seminar',type:'Seminar',date:d(4),time:'11:00',venue:'Seminar Hall B',cap:120,desc:'Industry speakers on AI careers.',fields:mk('Seminar')},
- {id:'e3',name:'Product Design Webinar',type:'Webinar',date:d(2),time:'17:00',venue:'Online (link sent by email)',cap:500,desc:'Live Q&A with a senior designer.',fields:mk('Webinar')},
- {id:'e4',name:'Intro to Git & GitHub',type:'Workshop',date:d(7),time:'14:00',venue:'Computer Lab 3',cap:40,desc:'Hands-on workshop. Bring your laptop.',fields:mk('Workshop')}];
- S.regs=[{id:'r1',eid:'e4',data:{},name:'Aarav Mehta',email:'',in:true,at:Date.now()},{id:'r2',eid:'e4',data:{},name:'Diya Nair',email:'',in:false,at:Date.now()},{id:'r3',eid:'e2',data:{},name:'Kabir Shah',email:'',in:false,at:Date.now()}];
-}
 const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.forms=e.forms||[];e.payments=e.payments||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
 S.events.forEach(ensure);
 let V={dt:'regs',qr:0,tab:'dash',eid:null,filter:'All',q:'',draft:null};
@@ -275,4 +267,5 @@ render();
 <script src="vendor/firebase-firestore-compat.js"></script>
 <script src="sync.js"></script>
 <script src="app2.js"></script>
+<script src="ui.js"></script>
 </body></html>
