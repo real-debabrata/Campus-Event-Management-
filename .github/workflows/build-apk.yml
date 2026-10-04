@@ -12,9 +12,23 @@ jobs:
         with: { node-version: 20 }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
+      - name: Restore permanent signing key
+        env:
+          PASS: ${{ secrets.KEYSTORE_PASSPHRASE }}
+        run: |
+          if [ -z "$PASS" ] || [ ! -f signing/debug.keystore.gpg ]; then
+            echo "::warning::Signing key not set up yet. This APK gets a random key and cannot update an installed app."
+            exit 0
+          fi
+          mkdir -p ~/.android
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" -o ~/.android/debug.keystore -d signing/debug.keystore.gpg
       - run: npm install
       - run: npx cap add android
       - run: npx cap sync android
+      - name: Set app version (read from www/ui.js)
+        run: |
+          VN=$(grep -oP "APP_VERSION='\K[0-9.]+" www/ui.js)
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"$VN\"/" android/app/build.gradle
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
