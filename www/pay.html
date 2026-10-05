@@ -46,9 +46,10 @@ const fail=m=>{root.innerHTML='<div class="card"><h1>Payment page unavailable</h
 if(!fid||!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey))fail('This payment link is incomplete or not set up.');
 else{
  firebase.initializeApp(C);const db=firebase.firestore();
- db.collection('payforms').doc(fid).get().then(d=>d.exists?show(d.data()):fail('This payment link is no longer available.')).catch(()=>fail('Could not load this page. Check your connection and try again.'));
+ db.collection('payforms').doc(fid).get().then(d=>d.exists?show(d.data()):fail('This payment link is no longer available.')).catch(x=>fail(x&&x.code==='permission-denied'?'This payment link has expired. Links stop working when the event is over or deleted. Please ask the organizers.':'Could not load this page. Check your connection and try again.'));
 }
 function show(f){
+ if(f.until&&Date.now()>f.until)return fail('This payment link has expired. Links stop working when the event is over. Please ask the organizers.');
  document.title='Pay: '+f.title;setTimeout(()=>window.splashDone&&splashDone(),0);
  const link='upi://pay?pa='+encodeURIComponent(f.upi)+'&pn='+encodeURIComponent(f.payee||'')+(f.amt?'&am='+f.amt:'')+'&cu=INR&tn='+encodeURIComponent(f.title);
  let svg='';try{const q=qrcode(0,'M');q.addData(link);q.make();svg=q.createSvgTag(8,4)}catch(e){}
@@ -77,7 +78,7 @@ function show(f){
   er.textContent='';$('go').disabled=true;
   firebase.firestore().collection('payforms').doc(fid).collection('subs').doc(u).set({n,a,utr:u,s:'pending',at:Date.now()})
    .then(()=>{$('fc').innerHTML=`<div class="ok"><b>✓</b><h1>Thank you, ${esc(n)}</h1><p class="meta">We received your details for ₹${a} (reference ${esc(u)}). The organizers will verify your payment.</p></div>`})
-   .catch(x=>{$('go').disabled=false;er.textContent=x.code==='permission-denied'?'This reference number was already submitted, or the details are not valid.':'Could not submit. Please try again.'});
+   .catch(x=>{$('go').disabled=false;er.textContent=x.code==='permission-denied'?'This reference number was already submitted, the details are not valid, or this link has just expired.':'Could not submit. Please try again.'});
  };
 }
 </script></body></html>

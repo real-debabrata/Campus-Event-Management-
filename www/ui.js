@@ -1,6 +1,6 @@
 /* Campus Events: menu bar, UI polish, app version control. Loads after sync.js/app2.js; no core code is modified. */
 (function(){
-const APP_VERSION='2.0.0',BUILD='2026-10-05';   // bump these on every release
+const APP_VERSION='3.1.0',BUILD='2026-10-05';   // bump these on every release
 const $=s=>document.querySelector(s),LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
 const root=document.documentElement;
 let theme=localStorage.getItem('campus-theme')||'auto',CFG=LS('campus-ver',null);
@@ -45,6 +45,9 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 #vs .box,#vb .box,#js .box{background:var(--card);border-radius:18px;padding:22px;width:min(380px,100%);box-shadow:0 24px 70px rgba(0,0,0,.45)}
 #ub{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;padding:8px 14px;background:linear-gradient(135deg,#4f6bff,#9b5cff);color:#fff;font-size:14px}#ub button{border:0;border-radius:8px;padding:4px 10px;font:inherit;font-weight:700;cursor:pointer}
 #jt{display:flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:8px 14px;background:linear-gradient(135deg,#1a73e8,#0b57d0);color:#fff;font:inherit;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 14px -4px rgba(26,115,232,.7);transition:.15s}#jt:hover{filter:brightness(1.1)}#jt:active{transform:scale(.97)}
+#vs .box,#vb .box,#js .box{position:relative}
+.x{float:right;position:sticky;top:0;z-index:2;display:grid;place-items:center;width:32px;height:32px;margin:-6px -6px 0 8px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--card);color:var(--ink);font:700 15px/1 system-ui,sans-serif;cursor:pointer}.x:hover{background:var(--bg)}
+#js .x,#vs .x{position:absolute;float:none;top:10px;right:10px;margin:0}
 #js input{text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:20px;font-weight:700}#js .btn:not(.ghost){background:#1a73e8}#jmsg{color:var(--bad);min-height:20px;font-size:13px;margin:8px 0 0}
 @media(max-width:400px){#jt span{display:none}#jt{padding:8px 10px}}
 `;document.head.append(css);
@@ -88,7 +91,7 @@ async function check(force){
 const update=()=>CFG&&CFG.url?window.open(CFG.url,'_blank'):location.replace(location.pathname+'?v='+Date.now());
 function about(){
  const c=CFG||{},st=!c.latest?'Not checked yet':newer()?'Update available: v'+c.latest:'You are up to date';
- vs.innerHTML=`<div class="box"><h3>Campus Events</h3><p class="meta">Version ${APP_VERSION} · build ${BUILD}</p><p><b>${esc(st)}</b></p>${c.notes?`<p class="meta">${esc(c.notes)}</p>`:''}
+ vs.innerHTML=`<div class="box"><button type="button" class="x" data-u="x" aria-label="Close">✕</button><h3>Campus Events</h3><p class="meta">Version ${APP_VERSION} · build ${BUILD}</p><p><b>${esc(st)}</b></p>${c.notes?`<p class="meta">${esc(c.notes)}</p>`:''}
  <div class="row"><button class="btn" data-u="chk">Check for updates</button>${newer()?'<button class="btn" data-u="upd">Update now</button>':''}<button class="btn ghost" data-u="x">Close</button></div></div>`;vs.classList.remove('hid');
 }
 
@@ -113,12 +116,19 @@ document.addEventListener('click',e=>{
  else if(u==='upd')update();
  else if(u==='dis'){localStorage.setItem('campus-ver-dismiss',String(CFG.latest));ub.classList.add('hid')}
  else if(u==='x')vs.classList.add('hid');
- else if(u==='join'){js.innerHTML='<div class="box"><h3>Join a team</h3><p class="meta">Enter the 6-letter event code your organiser shared with you.</p><input id="jcode" maxlength="6" autocomplete="off" autocapitalize="characters" aria-label="Event code"><p id="jmsg" role="alert"></p><div class="row" style="margin-top:6px"><button class="btn" data-u="jgo">Join</button><button class="btn ghost" data-u="jx">Cancel</button></div></div>';js.classList.remove('hid');setTimeout(()=>{const i=$('#jcode');i&&i.focus()},50)}
+ else if(u==='join'){js.innerHTML='<div class="box"><button type="button" class="x" data-u="jx" aria-label="Close">✕</button><h3>Join a team</h3><p class="meta">Enter the 6-letter event code your organiser shared with you.</p><input id="jcode" maxlength="6" autocomplete="off" autocapitalize="characters" aria-label="Event code"><p id="jmsg" role="alert"></p><div class="row" style="margin-top:6px"><button class="btn" data-u="jgo">Join</button><button class="btn ghost" data-u="jx">Cancel</button></div></div>';js.classList.remove('hid');setTimeout(()=>{const i=$('#jcode');i&&i.focus()},50)}
  else if(u==='jgo')joinEvent($('#jcode').value);
  else if(u==='jx')js.classList.add('hid');
  else if(u==='out'&&window.firebase)firebase.auth().signOut();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){um.classList.add('hid');vs.classList.add('hid');js.classList.add('hid')}if(e.key==='Enter'&&e.target.id==='jcode')joinEvent(e.target.value)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){um.classList.add('hid');vs.classList.add('hid');js.classList.add('hid');const p=$('#tp');if(p)p.classList.add('hid')}if(e.key==='Enter'&&e.target.id==='jcode')joinEvent(e.target.value)});
+// tapping outside the account / alerts panel closes it (the path is read now, because the panel may redraw itself during the click)
+document.addEventListener('click',e=>{
+ const p=$('#tp');if(!p||p.classList.contains('hid'))return;
+ const path=e.composedPath?e.composedPath():[];
+ if(path.some(n=>n&&(n.id==='tp'||n.id==='um'||n.id==='av'||n.id==='jt'||n.id==='js'||(n.dataset&&n.dataset.u))))return;
+ p.classList.add('hid');
+});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)check()});
 
 // ---- join by code. Works with the private rules (no read of the event is needed before joining) ----

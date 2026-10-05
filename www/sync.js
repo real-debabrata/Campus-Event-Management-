@@ -2,16 +2,19 @@
 const C=window.FB_CONFIG||{};
 const ready=!!(window.firebase&&C.apiKey&&!/YOUR_/.test(C.apiKey));
 const LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
-let P=Object.assign({tasks:1,people:1,money:1,event:1,chat:1,ntfy:0},LS('campus-prefs',{}));
+let P=Object.assign({tasks:1,people:1,money:1,event:1,chat:1,mention:1,ntfy:0},LS('campus-prefs',{}));
 let N=LS('campus-notes',[]);
 let U=null,db,unsub,applying=false;const sent={},owners={};
-const KEYS=['info','team','groups','tasks','teams','don','pay','regs','forms','payments'],MAPK=['forms','payments'];
+const KEYS=['info','team','groups','tasks','teams','don','pay','regs','forms','payments','bud','ven','exp','itm'],MAPK=['forms','payments','bud','ven','exp','itm'];   // 3.1.0: bud=budget lines, ven=vendors, exp=vendor payments, itm=items to buy
 const arr=o=>Array.isArray(o)?o:Object.values(o||{}).sort((a,b)=>(a.at||0)-(b.at||0));
 const toMap=a=>Object.fromEntries((a||[]).map(x=>[x.id,x]));
 const clean=o=>JSON.parse(JSON.stringify(o));
 const me=()=>((U&&(U.displayName||U.email.split('@')[0]))||'').toLowerCase();
 const err=x=>toast(x.code==='permission-denied'?'No permission. Check the Firestore rules.':'Sync problem: '+(x.message||x.code));
 const persist=()=>{try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(e){}};
+
+// v3.1.0: a payment link works until the end of the event day (+ optional extra days set in Payments).
+window.untilOf=e=>{const t=new Date((e.date||'')+'T23:59:59.999').getTime();return (isNaN(t)?Date.now()+864e5:t)+Math.max(0,Math.min(30,+((e.pay||{}).grace)||0))*864e5};
 
 const st=document.createElement('style');
 st.textContent='#tp{position:fixed;right:10px;top:calc(60px + env(safe-area-inset-top,0px));width:min(360px,94vw);max-height:78vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.25)}#au{position:fixed;inset:0;z-index:30}#au{display:grid;grid-template-columns:1.15fr 1fr;color:#fff;overflow:auto;background:radial-gradient(900px 500px at 8% 0%,rgba(123,147,255,.45),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(255,122,184,.35),transparent 60%),linear-gradient(135deg,#0a0f2e,#16205c 60%,#2a1f6e)}#au .hero{padding:8vh 6vw;display:flex;flex-direction:column;justify-content:center;gap:16px}#au .brand{display:flex;align-items:center;gap:12px;font:800 22px Poppins,system-ui,sans-serif}#au h1{font-size:clamp(30px,4.4vw,52px);line-height:1.05}#au .hero p{color:#c9d2ff;max-width:46ch;margin:0}#au ul{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}#au li{color:#e6eaff;padding-left:26px;position:relative}#au li:before{content:"";position:absolute;left:0;top:6px;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#7b93ff,#ff7ab8)}#au .pane{display:flex;align-items:center;justify-content:center;padding:20px}#au .glass{width:min(400px,100%);background:var(--card);color:var(--ink);border-radius:20px;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.45)}#au .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:10px;padding:4px;margin:14px 0 6px}#au .seg button{border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:8px;border-radius:8px;cursor:pointer}#au .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.2)}#au .go{width:100%;padding:12px;background:linear-gradient(135deg,#4f6bff,#9b5cff);color:#fff;border-radius:10px}@media(max-width:760px){#au{grid-template-columns:1fr}#au .hero{padding:28px 22px 6px}#au ul,#au .hero p{display:none}}.hid{display:none!important}';
@@ -40,7 +43,7 @@ function notify(list){
 function snapOf(e){
  const o={info:{name:e.name,type:e.type,date:e.date,time:e.time,venue:e.venue,cap:e.cap,desc:e.desc,fields:e.fields},
   team:e.team||[],groups:e.groups||[],tasks:e.tasks||[],teams:e.teams||[],don:e.don||[],pay:e.pay||{upi:'',payee:'',fee:0},
-  regs:S.regs.filter(r=>r.eid===e.id),forms:e.forms||[],payments:e.payments||[],members:e.members||{}};
+  regs:S.regs.filter(r=>r.eid===e.id),forms:e.forms||[],payments:e.payments||[],bud:e.bud||[],ven:e.ven||[],exp:e.exp||[],itm:e.itm||[],members:e.members||{}};
  return clean(o);
 }
 const parts=e=>{const o=snapOf(e),r={};KEYS.forEach(k=>r[k]=JSON.stringify(o[k]));return r};
@@ -63,6 +66,9 @@ function diff(o,n,who){
  Object.keys(nmem).filter(k=>!om[k]).forEach(k=>out.push({cat:'people',text:nmem[k].name+' joined the event'}));
  Object.keys(nmem).forEach(k=>{if(om[k]&&om[k].role!==nmem[k].role&&k===window.MYUID)out.push({cat:'people',me:true,text:'Your role is now '+nmem[k].role})});
  added(o.payments||[],n.payments||[]).forEach(p=>out.push({cat:'money',text:'Payment of ₹'+p.a+' from '+p.n+' submitted'}));
+ const mineItem=i=>i.who&&(i.who===window.MYUID||(who&&nm(i.who)===who));   // 3.1.0: items to buy assigned to you
+ added(o.itm||[],n.itm||[]).forEach(i=>{if(mineItem(i))out.push({cat:'tasks',me:true,text:'Item to buy assigned to you: '+i.t})});
+ (n.itm||[]).forEach(i=>{const p=(o.itm||[]).find(y=>y.id===i.id);if(p&&i.who!==p.who&&mineItem(i))out.push({cat:'tasks',me:true,text:'Item to buy assigned to you: '+i.t})});
  const a=o.info,b=n.info;
  if(a.name!==b.name||a.date!==b.date||a.time!==b.time||a.venue!==b.venue)out.push({cat:'event',text:'Event details changed'});
  return out;
@@ -75,7 +81,7 @@ function apply(id,d){
  let e=S.events.find(x=>x.id===id);const old=e?snapOf(e):null;
  if(!e){e={id};S.events.push(e)}
  Object.assign(e,d.info||{},{team:d.team||[],groups:d.groups||[],tasks:d.tasks||[],teams:d.teams||[],don:d.don||[],
-  pay:d.pay||{upi:'',payee:'',fee:0},forms:arr(d.forms),payments:arr(d.payments),cloud:1,owner:d.owner,ntfy:d.ntfy||'',members:d.members||{}});
+  pay:d.pay||{upi:'',payee:'',fee:0},forms:arr(d.forms),payments:arr(d.payments),bud:arr(d.bud),ven:arr(d.ven),exp:arr(d.exp),itm:arr(d.itm),cloud:1,owner:d.owner,ntfy:d.ntfy||'',members:d.members||{}});
  S.regs=S.regs.filter(r=>r.eid!==id).concat((d.regs||[]).map(r=>Object.assign({},r,{eid:id})));
  owners[id]=d.owner;sent[id]=parts(e);return old;
 }
@@ -89,7 +95,7 @@ function listen(){
    const old=apply(id,d);
    if(old&&!first&&!c.doc.metadata.hasPendingWrites)diff(old,snapOf(S.events.find(e=>e.id===id)),me()).forEach(m=>msgs.push(Object.assign(m,{n:d.info.name})));
   });
-  first=false;persist();render();watchSubs();window.chatSync&&chatSync();if(msgs.length)notify(msgs);
+  first=false;persist();render();watchSubs();fixForms();window.chatSync&&chatSync();if(msgs.length)notify(msgs);
  },err);
 }
 
@@ -99,14 +105,18 @@ window.onSave=()=>{if(!U)return;clearTimeout(tm);tm=setTimeout(()=>{flush();watc
 function flush(){
  Object.keys(sent).forEach(id=>{
   if(S.events.some(e=>e.id===id))return;
-  const ref=db.collection('events').doc(id);delete sent[id];
-  if(owners[id]===U.uid)(window.chatPurge?chatPurge(id):Promise.resolve()).then(()=>ref.delete()).catch(x=>{err(x);listen()});   // chat messages go first, then the event; on failure the event comes back
+  const ref=db.collection('events').doc(id),old=sent[id];delete sent[id];
+  if(owners[id]===U.uid){   // chat messages and payment links (with their submissions) go first, then the event; on failure the event comes back
+   let fids=[];try{fids=JSON.parse(old.forms).map(f=>f.id)}catch(x){}
+   (window.chatPurge?chatPurge(id):Promise.resolve()).then(()=>purgeForms(fids)).then(()=>ref.delete()).catch(x=>{err(x);listen()});
+  }
   else ref.update({['members.'+U.uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(U.uid)}).catch(err);
  });
  S.events.filter(e=>e.cloud&&sent[e.id]).forEach(e=>{
   const cur=parts(e),old=sent[e.id],upd={};
   KEYS.forEach(k=>{if(cur[k]===old[k])return;if(MAPK.includes(k)){const a=toMap(JSON.parse(old[k])),b=toMap(JSON.parse(cur[k]));for(const i in b)if(JSON.stringify(b[i])!==JSON.stringify(a[i]))upd[k+'.'+i]=b[i];for(const i in a)if(!b[i])upd[k+'.'+i]=firebase.firestore.FieldValue.delete()}else upd[k]=JSON.parse(cur[k])});
   if(!Object.keys(upd).length)return;
+  if(upd.info||upd.pay)(e.forms||[]).forEach(f=>db.collection('payforms').doc(f.id).update({until:untilOf(e),evName:e.name}).catch(()=>{}));   // event date or "keep open" days changed
   if(P.ntfy&&e.ntfy){
    const o={};KEYS.forEach(k=>o[k]=JSON.parse(old[k]));
    const nn=snapOf(e);o.members=nn.members;const msg=diff(o,nn,'').map(m=>m.text).join('; ');
@@ -115,6 +125,20 @@ function flush(){
   sent[e.id]=cur;
   db.collection('events').doc(e.id).update(upd).catch(err);
  });
+}
+
+// ---------- change your name (v3.1.0) ----------
+async function rename(raw){
+ const nm=(raw||'').replace(/\s+/g,' ').trim();
+ if(nm.length<2||nm.length>40)return toast('Use 2 to 40 characters for your name');
+ if(nm===(U.displayName||''))return toast('That is already your name');
+ try{
+  await U.updateProfile({displayName:nm});
+  window.MYNAME=nm;
+  const mine=S.events.filter(e=>e.cloud&&e.members&&e.members[U.uid]);
+  if(mine.length){const b=db.batch();mine.forEach(e=>{e.members[U.uid].name=nm;b.update(db.collection('events').doc(e.id),{['members.'+U.uid+'.name']:nm})});await b.commit()}
+  persist();render();panel();toast('Name changed to '+nm);
+ }catch(x){err(x)}
 }
 
 // ---------- share and join ----------
@@ -130,7 +154,7 @@ async function share(id){
  const regs=S.regs.filter(r=>r.eid===id);
  S.regs.forEach(r=>{if(r.eid===id)r.eid=code});
  e.id=code;e.cloud=1;e.owner=U.uid;e.ntfy='campus-'+code+'-'+rnd(8).toLowerCase();e.members={[U.uid]:{name:U.displayName||U.email,role:'owner'}};
- const o=snapOf(e);o.forms=toMap(o.forms);o.payments=toMap(o.payments);
+ const o=snapOf(e);['forms','payments','bud','ven','exp','itm'].forEach(k=>{o[k]=toMap(o[k])});
  try{await db.collection('events').doc(code).set(Object.assign(o,{owner:U.uid,ntfy:e.ntfy,members:e.members,memberIds:[U.uid]}));
   sent[code]=parts(e);owners[code]=U.uid;V.eid=code;persist();render();toast('Shared. Code: '+code)}
  catch(x){e.id=id;e.cloud=0;S.regs.forEach(r=>{if(r.eid===code)r.eid=id});err(x)}
@@ -147,8 +171,26 @@ async function join(code){
 window.rmMember=(id,uid)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members)return;delete e.members[uid];e.tasks.forEach(k=>{if(k.who===uid)k.who=''});save();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(uid)}).catch(err)};
 window.setRole=(id,uid,role)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members||!e.members[uid])return;e.members[uid].role=role;persist();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid+'.role']:role}).catch(err)};
 window.SUBS=window.SUBS||{};const subUn={};
-window.pubForm=(f,e)=>{if(db&&U)db.collection('payforms').doc(f.id).set({eid:e.id,evName:e.name,title:f.title,amt:f.amt||0,upi:f.upi,payee:f.payee,note:f.note||'',by:U.uid,byName:f.byName||'',at:f.at}).catch(err)};
-window.pubDel=id=>{if(db&&U)db.collection('payforms').doc(id).delete().catch(()=>{})};
+window.pubForm=(f,e)=>{if(db&&U){markFixed(f.id);db.collection('payforms').doc(f.id).set({eid:e.id,evName:e.name,title:f.title,amt:f.amt||0,upi:f.upi,payee:f.payee,note:f.note||'',by:U.uid,byName:f.byName||'',at:f.at,until:untilOf(e)}).catch(err)}};
+// Deleting a link also deletes the payments people submitted through it (Firestore never removes sub-collections by itself).
+async function purgeForm(fid){
+ const ref=db.collection('payforms').doc(fid);
+ try{for(let i=0;i<200;i++){const sn=await ref.collection('subs').limit(400).get({source:'server'});if(sn.empty)break;const b=db.batch();sn.docs.forEach(d=>b.delete(d.ref));await b.commit()}}
+ catch(x){if(x.code!=='permission-denied')throw x}
+ await ref.delete().catch(x=>{if(x.code!=='permission-denied'&&x.code!=='not-found')throw x});
+}
+const purgeForms=ids=>Promise.all((ids||[]).map(purgeForm));
+window.pubDel=id=>{if(db&&U)purgeForm(id).catch(()=>{})};
+// Links made before 3.1.0 have no expiry. The first organiser/creator who opens the new app stamps one (one read per old link, once per device).
+const FIXED=LS('campus-pf-fixed',{});
+const markFixed=id=>{FIXED[id]=1;try{localStorage.setItem('campus-pf-fixed',JSON.stringify(FIXED))}catch(x){}};
+function fixForms(){
+ if(!U||!window.can)return;
+ S.events.filter(e=>e.cloud).forEach(e=>(e.forms||[]).forEach(f=>{
+  if(FIXED[f.id]||!(f.by===U.uid||can(e,'pay')))return;markFixed(f.id);
+  db.collection('payforms').doc(f.id).get().then(d=>{if(d.exists&&typeof d.data().until!=='number')return d.ref.update({until:untilOf(e),evName:e.name})}).catch(()=>{delete FIXED[f.id]});
+ }));
+}
 window.subAct=(fid,sid,a)=>{if(!db)return;const r=db.collection('payforms').doc(fid).collection('subs').doc(sid);(a==='sd'?r.delete():r.update({s:a==='sv'?'verified':'rejected'})).catch(err)};
 function watchSubs(){
  if(!U||!window.can)return;const want={};
@@ -169,9 +211,11 @@ const tp=document.createElement('div');tp.id='tp';tp.className='hid';document.bo
 function panel(){
  if(!ready){tp.innerHTML='<h3>Sync is off</h3><p class="meta">Add your Firebase config in firebase-config.js to share events with your team and get live alerts.</p>';return}
  if(!U){tp.innerHTML='<p class="meta">Not signed in.</p>';return}
- tp.innerHTML=`<h3>${esc(U.displayName||'Member')}</h3><p class="meta">${esc(U.email)}</p>
+ tp.innerHTML=`<button type="button" class="x" id="tpx" aria-label="Close">✕</button><h3>${esc(U.displayName||'Member')}</h3><p class="meta">${esc(U.email)}</p>
+ <label for="nmi">Your name</label><div class="row"><input id="nmi" maxlength="40" value="${esc(U.displayName||'')}" autocomplete="name" style="flex:1"><button class="btn" id="nmb">Save</button></div>
+ <p class="meta" style="margin:4px 0 0">Changes your name in all your events. Old chat messages keep the name they were sent with.</p>
  <label>Join an event</label><div class="row"><input id="jc" placeholder="Event code" style="flex:1;text-transform:uppercase"><button class="btn" id="jb">Join</button></div>
- <label>Notify me about</label><div class="row">${[['tasks','Tasks'],['people','People'],['money','Money'],['event','Event changes'],['chat','Chat messages']].map(k=>`<label style="margin:0"><input type="checkbox" data-p="${k[0]}" ${P[k[0]]?'checked':''}> ${k[1]}</label>`).join('')}</div>
+ <label>Notify me about</label><div class="row">${[['tasks','Tasks'],['people','People'],['money','Money'],['event','Event changes'],['chat','Chat messages'],['mention','Chat mentions']].map(k=>`<label style="margin:0"><input type="checkbox" data-p="${k[0]}" ${P[k[0]]?'checked':''}> ${k[1]}</label>`).join('')}</div>
  <label><input type="checkbox" data-p="ntfy" ${P.ntfy?'checked':''}> Also send my changes to the event's ntfy topic</label>
  <h3 style="margin-top:14px">Recent updates</h3>${N.length?N.slice(0,15).map(n=>`<div class="meta" style="padding:4px 0;border-bottom:1px solid var(--line)">${esc(n.text)}</div>`).join(''):'<p class="meta">Nothing yet.</p>'}
  <div class="row" style="margin-top:12px"><button class="btn ghost sm" id="clr">Clear updates</button><button class="btn ghost sm del" id="so">Sign out</button></div>`;
@@ -187,6 +231,8 @@ document.addEventListener('click',async e=>{
  else if(t.id==='jb')join(g('jc').value);
  else if(t.id==='clr'){N=[];localStorage.setItem('campus-notes','[]');badge();panel()}
  else if(t.id==='so'){tp.classList.add('hid');firebase.auth().signOut()}
+ else if(t.id==='tpx')tp.classList.add('hid');
+ else if(t.id==='nmb')rename(g('nmi').value);
  else if(t.id==='off')g('au').remove();
  else if(t.dataset.m){AM=t.dataset.m;authUI(true)}
  else if(t.id==='go'){
@@ -196,6 +242,7 @@ document.addEventListener('click',async e=>{
   catch(x){g('am').textContent=x.message.replace('Firebase: ','')}
  }
 });
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='nmi'){e.preventDefault();rename(e.target.value)}});
 document.addEventListener('change',e=>{
  const k=e.target.dataset&&e.target.dataset.p;
  if(k){P[k]=e.target.checked?1:0;localStorage.setItem('campus-prefs',JSON.stringify(P))}
