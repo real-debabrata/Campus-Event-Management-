@@ -109,7 +109,7 @@ document.addEventListener('click',e=>{
  if(!e.target.closest('#um')&&t!==av)um.classList.add('hid');
  if(t===av)return openUM();
  const u=t&&t.dataset.u;if(!u)return;um.classList.add('hid');
- if(u==='acct')tb&&tb.click();
+ if(u==='acct'){const p=$('#tp');if(tb&&(!p||p.classList.contains('hid')))tb.click()}   // open (never toggle shut) the account / alerts / join panel
  else if(u==='theme'){theme={auto:'light',light:'dark',dark:'auto'}[theme];localStorage.setItem('campus-theme',theme);applyTheme();toast('Theme: '+theme)}
  else if(u==='about')about();
  else if(u==='chk')check(true);
@@ -126,7 +126,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){um.classList.add('h
 document.addEventListener('click',e=>{
  const p=$('#tp');if(!p||p.classList.contains('hid'))return;
  const path=e.composedPath?e.composedPath():[];
- if(path.some(n=>n&&(n.id==='tp'||n.id==='um'||n.id==='av'||n.id==='jt'||n.id==='js'||(n.dataset&&n.dataset.u))))return;
+ if(path.some(n=>n&&(n===tb||n.id==='tp'||n.id==='um'||n.id==='av'||n.id==='jt'||n.id==='js'||(n.dataset&&n.dataset.u))))return;   // n===tb: the menu opens the panel by clicking the hidden Team button; that click must not count as "outside"
  p.classList.add('hid');
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)check()});
