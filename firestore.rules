@@ -10,6 +10,12 @@ service cloud.firestore {
     function formData(fid) { return get(/databases/$(database)/documents/payforms/$(fid)).data; }
     function seesForm(fid) { return request.auth != null && (formData(fid).by == request.auth.uid || isStaff(formData(fid).eid)); }
 
+    // Chat text is either a plain string (max 1000 chars) or deflate-compressed bytes flagged with c == 1.
+    function chatTextOk(d) {
+      return (d.t is string && d.t.size() > 0 && d.t.size() <= 1000 && !('c' in d))
+          || (d.t is bytes && d.t.size() > 0 && d.t.size() <= 4000 && 'c' in d && d.c == 1);
+    }
+
     // A non-member may only add THEMSELVES as a plain 'member'. Nothing else may change.
     function joinOk() {
       let n = request.resource.data;
@@ -34,6 +40,34 @@ service cloud.firestore {
       allow update: if request.auth != null && (
         request.auth.uid in resource.data.memberIds || joinOk());
       allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
+
+      // Event chat (v2.0.0). Members read everything, including messages sent before they joined.
+      match /chat/{mid} {
+        allow read: if isMember(id);
+
+        // Only a member who may write (not a viewer) can post, only as themselves, with their own member name.
+        // 'at' must be the server's time, so nobody can fake or back-date a message.
+        allow create: if isWriter(id)
+          && request.resource.data.keys().hasOnly(['u','n','t','at','c'])
+          && request.resource.data.u == request.auth.uid
+          && request.resource.data.n == evData(id).members[request.auth.uid].name
+          && request.resource.data.at == request.time
+          && chatTextOk(request.resource.data);
+
+        // Own messages can be edited for 2 hours after they were sent.
+        allow update: if isWriter(id)
+          && resource.data.u == request.auth.uid
+          && request.time < resource.data.at + duration.value(2, 'h')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['t','c','ed'])
+          && request.resource.data.ed == request.time
+          && chatTextOk(request.resource.data);
+
+        // Own messages can be deleted for 2 hours. Organizer and managers can delete any message at any time
+        // (moderation, and clearing the chat when the event is deleted).
+        allow delete: if isMember(id) && (
+          (resource.data.u == request.auth.uid && request.time < resource.data.at + duration.value(2, 'h'))
+          || role(id) in ['owner','organizer','manager']);
+      }
     }
 
     // Public payment links: anyone with the link can open the form and submit details.

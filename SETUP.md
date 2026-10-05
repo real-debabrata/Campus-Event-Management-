@@ -47,3 +47,50 @@ Then the Actions tab will show "Build APK" and "Deploy web version".
 - login.html is now a separate sign-in and sign-up page. The app (index.html) redirects there until you sign in.
 - Sign-in sticks on the device, so the app opens and works offline afterwards. The first sign-in needs internet.
 - Update these files in www/: index.html, sync.js, app2.js, and add login.html. Firestore rules are unchanged.
+
+## Upgrade to 2.0.0: event chat, task descriptions, loading screen
+
+### Files to upload
+In `www/` replace: index.html, sync.js, app2.js, ui.js, login.html, pay.html.
+In `www/` add (new): chat.js, splash.css, splash.js.
+In the repo root replace: firestore.rules, package.json, README.md, SETUP.md.
+Delete `www/firestore.rules` if you still have it. It is an old, outdated copy; the real one is `firestore.rules` in the repo root.
+
+### Set up the chat, free (about 10 minutes)
+Chat reuses the Firebase project, sign-in and Firestore database you already have. There is nothing to buy or switch on: no Blaze plan, no card, no Cloud Functions, no Storage.
+1. Open console.firebase.google.com > your project > Build > Firestore Database > Rules.
+2. Select everything in the editor, paste the new `firestore.rules` from the repo root, click Publish. (Skip this and the Chat tab shows "Could not load messages (permission-denied)".)
+3. No index is needed. Firestore creates the one the chat uses on its own.
+4. Upload the files above to GitHub and commit to main. The "Build APK" workflow runs by itself. For the website, run Actions > "Deploy web version" > Run workflow.
+5. Optional: in Firestore > Data > appconfig > version, set `latest` to 2.0.0 (and `notes`) so phones with an older APK get the update banner.
+6. Test it:
+   - Open a shared event > Chat tab > send a message.
+   - Sign in on a second device or browser, join with the event code, open Chat. The old messages are there.
+   - Tap one of your messages > Edit or Delete. After 2 hours these buttons disappear, and Firestore refuses the change as well.
+   - Delete a test event, then check Firestore > Data: the event and its `chat` messages are both gone.
+
+### How the chat works
+- Messages live in Firestore at `events/{code}/chat/{message}`. The rules reuse the event's member list, so only members can read or write, and viewers can read but not post.
+- Each message stores only: sender id (`u`), name (`n`), text (`t`), server time (`at`), and `ed` when edited. The name must match the member's name in the event and the time is set by the server, so nobody can impersonate or back-date.
+- Roles in brackets are read live from the event's member list, so they update when a role changes.
+- Messages of 120+ characters are deflate-compressed and stored as bytes when that saves at least 15%. Short messages stay plain text because compressing them would make them bigger.
+- Deleting an event: Firestore does not remove sub-collections on its own, so the organizer's app deletes the chat messages first and then the event. If that fails (for example no internet), the event comes back so you can delete it again.
+- Alerts: with the Chat tab closed, the app watches only the newest message of each event to show an unread dot and a notification. Under Team > "Notify me about", "Chat messages" turns these on or off. If the ntfy option is on, a "new chat message from NAME" ping (never the message text) is also sent to the event's ntfy topic for closed apps.
+- To show "Cashier" instead of "Treasurer", change `treasurer:'Treasurer'` to `treasurer:'Cashier'` on the second line of `www/app2.js`.
+
+### Free-plan budget (Spark: 50,000 reads, 20,000 writes, 20,000 deletes per day, 1 GiB stored)
+- Opening a chat reads up to 40 messages. "Load older messages" reads up to 40 more each time.
+- Each message sent is 1 write. Every member whose app is open reads it once, so reads are about `messages x active members`.
+  Example: 20 members and 150 messages in a day is about 150 writes and 3,000 reads.
+- Security rule checks also count as reads. Reads and writes are the limit to watch, not storage: 1 GiB holds millions of short messages.
+- Deleting an event with a long chat costs one read and one delete per message.
+- If a daily limit is reached, the affected action pauses until the quota resets. Watch Firebase console > Firestore > Usage.
+
+### Task descriptions
+- Create a task with the optional "Description for the assignee" box, or tap "+ Brief" on an existing task.
+- The brief is folded to save space. Tap "Brief" to open or close it. The task's creator, team leads, managers and the organizer can edit it ("Edit brief").
+- The assignee sees it under Tasks and under My tasks. Max 600 characters.
+
+### Loading screen
+- The animated logo shows on index.html, login.html and pay.html while the page boots, for at least about 1.2 seconds on the first open and 0.5 seconds after.
+- Look and timing: `www/splash.css` and `www/splash.js` (the `MIN` value).
