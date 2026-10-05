@@ -16,6 +16,19 @@ service cloud.firestore {
           || (d.t is bytes && d.t.size() > 0 && d.t.size() <= 4000 && 'c' in d && d.c == 1);
     }
 
+    // v3.1.0: @mentions. Optional list 'm' of member ids (max 20), every id must belong to a member of this event.
+    function mentionOk(eid, d) {
+      return !('m' in d) || (d.m is list && d.m.size() > 0 && d.m.size() <= 20
+        && d.m.toSet().difference(evData(eid).memberIds.toSet()).size() == 0);
+    }
+
+    // v3.1.0: a payment link is live only while its event still exists AND the expiry time ('until', ms) has not passed.
+    // Links created before 3.1.0 have no 'until'; they stay live until the app stamps one on them (see SETUP.md).
+    function liveForm(d) {
+      return exists(/databases/$(database)/documents/events/$(d.eid))
+        && d.get('until', 99999999999999) > request.time.toMillis();
+    }
+
     // A non-member may only add THEMSELVES as a plain 'member'. Nothing else may change.
     function joinOk() {
       let n = request.resource.data;
@@ -48,19 +61,21 @@ service cloud.firestore {
         // Only a member who may write (not a viewer) can post, only as themselves, with their own member name.
         // 'at' must be the server's time, so nobody can fake or back-date a message.
         allow create: if isWriter(id)
-          && request.resource.data.keys().hasOnly(['u','n','t','at','c'])
+          && request.resource.data.keys().hasOnly(['u','n','t','at','c','m'])
           && request.resource.data.u == request.auth.uid
           && request.resource.data.n == evData(id).members[request.auth.uid].name
           && request.resource.data.at == request.time
-          && chatTextOk(request.resource.data);
+          && chatTextOk(request.resource.data)
+          && mentionOk(id, request.resource.data);
 
         // Own messages can be edited for 2 hours after they were sent.
         allow update: if isWriter(id)
           && resource.data.u == request.auth.uid
           && request.time < resource.data.at + duration.value(2, 'h')
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['t','c','ed'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['t','c','ed','m'])
           && request.resource.data.ed == request.time
-          && chatTextOk(request.resource.data);
+          && chatTextOk(request.resource.data)
+          && mentionOk(id, request.resource.data);
 
         // Own messages can be deleted for 2 hours. Organizer and managers can delete any message at any time
         // (moderation, and clearing the chat when the event is deleted).
@@ -70,22 +85,27 @@ service cloud.firestore {
       }
     }
 
-    // Public payment links: anyone with the link can open the form and submit details.
+    // Public payment links: anyone with the link can open the form and submit details, but only while the link is live
+    // (its event exists and the expiry time has not passed). Organizers and the link's creator can always read it.
     match /payforms/{fid} {
-      allow get: if true;
+      allow get: if resource == null
+        || liveForm(resource.data)
+        || (request.auth != null && (resource.data.by == request.auth.uid || isStaff(resource.data.eid)));
       allow list: if false;
       allow create: if request.auth != null
         && request.resource.data.by == request.auth.uid
-        && isWriter(request.resource.data.eid);
+        && isWriter(request.resource.data.eid)
+        && request.resource.data.until is number;
       allow update: if request.auth != null
         && (resource.data.by == request.auth.uid || isStaff(resource.data.eid))
         && request.resource.data.eid == resource.data.eid
-        && request.resource.data.by == resource.data.by;
+        && request.resource.data.by == resource.data.by
+        && request.resource.data.until is number;
       allow delete: if request.auth != null
         && (resource.data.by == request.auth.uid || isStaff(resource.data.eid));
 
       match /subs/{sid} {
-        // Payers need no account. The document id is the UTR, so a UTR can be submitted only once.
+        // Payers need no account. The document id is the UTR, so a UTR can be submitted only once. Closed once the link expires or the event is deleted.
         allow create: if request.resource.data.keys().hasOnly(['n','a','utr','s','at'])
           && request.resource.data.n is string
           && request.resource.data.n.size() > 0 && request.resource.data.n.size() <= 80
@@ -96,7 +116,8 @@ service cloud.firestore {
           && request.resource.data.utr == sid
           && request.resource.data.s == 'pending'
           && request.resource.data.at is number
-          && exists(/databases/$(database)/documents/payforms/$(fid));
+          && exists(/databases/$(database)/documents/payforms/$(fid))
+          && liveForm(formData(fid));
         allow get, list: if seesForm(fid);
         allow update: if seesForm(fid)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['s'])

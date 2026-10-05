@@ -94,3 +94,46 @@ Chat reuses the Firebase project, sign-in and Firestore database you already hav
 ### Loading screen
 - The animated logo shows on index.html, login.html and pay.html while the page boots, for at least about 1.2 seconds on the first open and 0.5 seconds after.
 - Look and timing: `www/splash.css` and `www/splash.js` (the `MIN` value).
+
+## Upgrade to 3.1.0: expenses, payment-link expiry, name change, chat tagging
+
+Everything stays on the free Spark plan. There is no new service, no Cloud Functions, no Blaze plan and no card.
+
+### Files to upload
+In `www/` replace: index.html, sync.js, app2.js, chat.js, ui.js, pay.html.
+In `www/` add (new): expenses.js.
+In the repo root replace: firestore.rules, package.json, README.md, SETUP.md.
+Not changed: login.html, splash.css, splash.js, firebase-config.js, vendor/, the workflows.
+
+### Steps (about 10 minutes)
+1. **Publish the new rules first.** Firebase console > Firestore Database > Rules > select everything, paste the new `firestore.rules` from the repo root > Publish. The new rules do three things: members can tag members in chat, payment links carry an expiry (`until`) and stop working when it passes or the event is gone, and payers cannot submit to a dead link.
+2. **Upload the files** above to GitHub and commit to main. The "Build APK" workflow starts by itself and builds 3.1.0 (the version comes from `APP_VERSION` in www/ui.js).
+3. **Deploy the website.** Actions > "Deploy web version" > Run workflow. This puts the new `pay.html` (the "link expired" message) and the web app live.
+4. **Tell the app a new version exists.** Firebase console > Firestore > Data > `appconfig` > `version`: set `latest` to `3.1.0` and add `notes`. Also set `min` to `3.1.0` if you want to block old APKs: from step 1 on, a 2.x app can no longer create payment links (the rules now require the expiry that only 3.1.0 writes).
+5. **Open the new app once as the organizer (or treasurer).** Payment links made before 3.1.0 have no expiry, so they would stay open forever. The app stamps the expiry on them automatically the first time an organizer, manager, treasurer or the link's creator opens it (one read per old link, once per device). Check one in Firebase console > Firestore > Data > `payforms` > a document > field `until`.
+6. **Test it** (use a test event):
+   - *Name*: avatar menu > Account, alerts & join event > change "Your name" > Save. The avatar letter, the People table and new chat messages use the new name on every device.
+   - *Close buttons*: the account / alerts panel, the join popup (avatar menu or "Join team") and the About popup each have a ✕. The account panel also closes with Esc or a tap outside.
+   - *Chat scrolling*: open a shared event > Chat. The page no longer scrolls; the message list does. Open the keyboard, type, and have someone send a message from another device: the keyboard stays open and the list stays where it was.
+   - *Tagging*: type `@` (or tap the @ button), pick a member. On the other device the message is outlined and a "tagged you" alert appears (Account > Notify me about > Chat mentions).
+   - *Budget*: Event > Expenses > add budget lines.
+   - *Vendor payment*: add a vendor with a UPI ID, add a payment "To pay", tap Pay via UPI, then Mark paid with a UTR. The Spent and Left numbers move.
+   - *Items*: add an item and allocate it to a member. That member sees an alert and the item under My tasks. They tap Mark bought and enter the real cost.
+   - *Payment link expiry*: create a payment link and open it in a private window. Set the event date to yesterday (Edit event): after a few seconds, reload the link. It shows "This payment link has expired", and the Payments tab shows "Expired". Set the date back, or use Payments > Link expiry > "Keep links open" for extra days, and it works again.
+   - *Event deletion*: delete the test event. In Firestore > Data, the `events` document, its `chat` messages, the event's `payforms` documents and their `subs` are all gone. The old link now shows "expired".
+
+### How it works
+- **Name change.** Firebase sign-in keeps your display name; the app also copies it into `members.<your id>.name` of each event you are in, because the chat rules compare a message's name with that field. Old chat messages keep the name they were sent with.
+- **Expenses data** lives in the event document as four map fields: `bud` (budget lines), `ven` (vendors), `exp` (payments to vendors), `itm` (items to buy). Each entry is its own field (`itm.<id>`), so two people editing different items never overwrite each other, the same way payment links already work. It syncs and works offline like the rest of the event, and adds no reads. A Firestore document holds up to 1 MiB, which fits well over a thousand entries.
+- **Spent / to pay.** Spent = vendor payments marked paid + bought items at their real cost. Still to pay = unpaid vendor payments + items not bought yet at their estimate. Left = budget - spent - still to pay. Entries without a category are counted in the totals and shown as "No category".
+- **Payment link expiry.** Each `payforms` document stores `until` (milliseconds). It is the end of the event day plus the optional "keep links open" days (Payments > Link expiry, 0 to 30; stored in the event's `pay.grace`). When the event date or the extra days change, the app updates `until` on all of the event's links. The rules (`liveForm` in firestore.rules) make a link unreadable and unsubmittable once `until` has passed **or** the event document no longer exists, so a link also dies at once if a clean-up could not finish.
+- **Clean-up on delete.** Firestore does not remove sub-collections on its own. When the organizer deletes an event, the app deletes the chat messages, then each payment link with its submissions, then the event. If anything fails (for example no internet) the event comes back and you can delete it again. Deleting a single payment link also deletes its submissions (the app asks first).
+- **Tagging.** A tagged message stores a list `m` of member ids next to its text. The rules accept only ids of people in the event (max 20). The mention alert follows "Chat mentions" in the account panel, not "Chat messages".
+- **Chat layout.** In the Chat tab the app adds the class `chatmode` to the page: the event card is hidden, the page cannot scroll, and the chat card is sized to the visible area (`visualViewport`, so it follows the phone keyboard). When the keyboard is open the bottom menu is hidden.
+
+### Free-plan budget (Spark: 50,000 reads, 20,000 writes, 20,000 deletes per day)
+- Expenses: one write per change (adding an item, ticking it bought, editing a budget amount). Members already read the event document, so there are no extra reads.
+- Name change: one write per event you are in.
+- Tagging: no extra reads or writes (it is a field on the message).
+- Payment links: a payer opening a link is 1 read (plus the rules' event check, billed as a read) and a submission is 1 write with a few rule reads. Deleting an event or a link costs one read and one delete per submission.
+- Deleting an event with a long chat and many submissions can use a few hundred operations in one go. That is fine within the daily limits. Watch Firebase console > Firestore > Usage.

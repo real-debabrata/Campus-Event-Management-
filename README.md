@@ -1,9 +1,21 @@
-# Campus Events (CEM) 2.0.0
+# Campus Events (CEM) 3.1.0
 
-Plan campus events with your team: registrations, tasks, roles, UPI payment links and now a chat inside every event.
+Plan campus events with your team: registrations, tasks, roles, UPI payment links, a chat inside every event and now expenses.
 Runs as an Android app (APK built by GitHub, no installs) and as a website. Everything fits in the free plans of GitHub and Firebase (Spark).
 
-## What's new in 2.0.0
+## What's new in 3.1.0
+- **Expenses tab** (Event > Expenses).
+  - *Budget*: add budget lines (Food, Venue, Decor...) with a planned amount. Each line shows spent, still to pay, what is left and a bar that turns red when you go over.
+  - *Vendors and parties*: save who you pay, with an optional UPI ID and phone.
+  - *Payments to vendors*: record what you owe or have paid. For a vendor with a UPI ID, **Pay via UPI** shows a QR code and an "Open UPI app" button with the amount filled in. **Mark paid** stores the mode and UTR.
+  - *Items to buy*: build a shopping list (item, quantity, estimated cost, category) and **allocate each item to a member**. The member gets an alert, sees the item under **My tasks**, and marks it bought with the real cost. A "Who is buying what" table shows each member's share.
+  - Who sees what: organizer, manager and treasurer manage budget, vendors and payments. Organizer, manager, treasurer and team lead add and allocate items. Everyone else sees only the items list.
+- **Payment links belong to the event.** A link stops working at the end of the event day (organizers can keep it open up to 30 extra days under Payments > Link expiry), and when the event is deleted its links and the payments submitted through them are deleted too. Expiry is enforced by the Firestore rules, so an old link cannot be used even if someone saved the page.
+- **Change your name**: Account menu > Account, alerts & join event > Your name. It updates your name in every event you are in.
+- **Chat**: fixed the scrolling (the chat now fills the screen and only the message list scrolls, the keyboard no longer closes when a sync arrives, new messages no longer jump the list). **Tag members** by typing @ or tapping the @ button; tagged people get an alert (Chat mentions) and see the message outlined.
+- **Close buttons** on the account / alerts panel, the join-event popup and the About popup. The account panel also closes with Esc or by tapping outside.
+
+## What was new in 2.0.0
 - **Event chat.** Every shared event has a Chat tab, like a group chat. Names show their role, for example `Rohit (Treasurer)` and `Ronit (Member)`.
   - People who join later can read the whole history ("Load older messages" pages back 40 at a time).
   - Edit or delete your own message within 2 hours of sending. Organizer and managers can delete any message.
@@ -29,21 +41,23 @@ Needs Node 20, JDK 17 and Android Studio.
     npx cap open android     (then Build > Build APK)
 
 ## Set up Firebase, chat and the website
-Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the step-by-step chat setup under "Upgrade to 2.0.0").
+Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: "Upgrade to 2.0.0" (chat) and "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging)).
 
 ## Files
 | Path | What it does |
 | --- | --- |
 | www/index.html | Main app: events, attendees, tabs |
 | www/sync.js | Firebase sign-in, live sync, alerts |
-| www/app2.js | Roles, tasks (with descriptions), people, payment links |
-| www/chat.js | Event chat (new in 2.0.0) |
+| www/app2.js | Roles, tasks (with descriptions), people, payment links and their expiry |
+| www/expenses.js | Budget, vendors, vendor payments, items to buy (new in 3.1.0) |
+| www/chat.js | Event chat, @tagging, full-screen layout |
 | www/ui.js | Menu bar, themes, version control. `APP_VERSION` lives here |
 | www/splash.css, www/splash.js | Animated logo loader (new in 2.0.0) |
 | www/login.html, www/pay.html | Sign-in page, public payment page |
 | firestore.rules | Security rules. Paste into Firebase console > Firestore > Rules |
 
 ## Notes
-- Event data is cached on the phone and synced through Firebase. Chat needs a shared event.
+- Event data is cached on the phone and synced through Firebase. Chat and payment links need a shared event.
+- Budget, vendors, payments and items are stored inside the event document. The app hides the money sections from members who are not organizer, manager or treasurer, but everyone in the event can technically read the event document. Do not share an event code with people you do not trust with the budget.
 - The APK is a debug build for sideloading. For Play Store, create a signed release build.
 - To change the app, edit the files in www/, push to GitHub, and the workflow rebuilds the APK. Bump `APP_VERSION` in www/ui.js on every release.
