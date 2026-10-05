@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="splash.css">
 <title>Campus Events</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
@@ -46,6 +47,7 @@ input[type=checkbox]{width:auto}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:4px 12px;font:inherit;font-size:13px;cursor:pointer}.chip.on{background:var(--ink);color:var(--bg)}
 .qr{background:#fff;padding:8px;display:inline-block;border-radius:8px}.qr svg{display:block;max-width:100%;height:auto}
 </style><script src="qrcode.js"></script><style>.gate body{visibility:hidden}</style><script>document.documentElement.className="gate"</script></head><body>
+<div id="splash" role="status" aria-label="Loading Campus Events"><div class="sp-logo"><i class="sp-ring"></i><div class="sp-mark"><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lgs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" fill="url(#lgs)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg></div></div><div class="sp-name">Campus Events</div><div class="sp-sub">Getting your events ready</div><div class="sp-bar"><i></i></div></div>
 <header><h1 style="display:flex;align-items:center;gap:8px"><svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#lg2)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg>Campus Events</h1><nav id="nav"></nav></header>
 <main id="app"></main>
 <script>
@@ -113,10 +115,10 @@ function fieldInput(f){
 }
 function detail(){
  const e=ev(V.eid);if(!e)return list();
- if(V.dt!=='regs')return head(e)+subtabs()+section(e);
+ if(V.dt!=='regs')return head(e)+subtabs(e)+section(e);
  const rs=regsOf(e.id),full=rs.length>=e.cap;
  const cols=e.fields.slice(0,3);
- return `${head(e)}${subtabs()}
+ return `${head(e)}${subtabs(e)}
  <div class="card"><h3>Register an attendee</h3>
  ${full?'<p class="meta">This event is full.</p>':`<form id="reg" data-eid="${e.id}">${e.fields.map(fieldInput).join('')}<div style="margin-top:12px"><button class="btn" type="submit">Register</button></div></form>`}</div>
  <div class="card"><div class="row" style="justify-content:space-between"><h3>Attendees (${rs.length}/${e.cap})</h3><span class="meta">${rs.filter(r=>r.in).length} checked in</span></div>
@@ -189,8 +191,8 @@ const head=e=>`<button class="btn ghost sm" data-go="events">Back to events</but
  <span class="tag" style="color:${TYPES[e.type]}">${e.type}</span><h2>${esc(e.name)}</h2>
  <p class="meta">${fmt(e)} at ${esc(e.venue)}</p><p>${esc(e.desc)}</p>
  ${window.shareBar?shareBar(e):''}<p class="meta">Your role: ${LBL[myRole(e)]}</p>${can(e,'event')?`<div class="row"><button class="btn ghost sm" data-edit="${e.id}">Edit event</button><button class="btn ghost sm del" data-del="${e.id}">${myRole(e)==='owner'?'Delete event':'Leave event'}</button></div>`:(e.cloud?`<div class="row"><button class="btn ghost sm del" data-del="${e.id}">Leave event</button></div>`:'')}</div>`;
-const subtabs=()=>`<div class="chips">${[['regs','Attendees'],['people','People'],['tasks','Tasks'],['pay','Payments']].map(t=>`<button class="chip ${V.dt===t[0]?'on':''}" data-dt="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-const section=e=>({people:peopleV,tasks:tasksV2,pay:payV2})[V.dt==='team'||V.dt==='teams'?'people':V.dt](e);
+const subtabs=e=>`<div class="chips">${[['regs','Attendees'],['people','People'],['tasks','Tasks'],['pay','Payments'],['chat','Chat']].map(t=>`<button class="chip ${V.dt===t[0]?'on':''}" data-dt="${t[0]}">${t[1]}${t[0]==='chat'&&e&&window.chatDot?chatDot(e):''}</button>`).join('')}</div>`;
+const section=e=>({people:peopleV,tasks:tasksV2,pay:payV2,chat:window.chatV||(()=>'')})[V.dt==='team'||V.dt==='teams'?'people':V.dt](e);
 const nm=(e,id)=>(e.team.find(m=>m.id===id)||{}).n||'Unassigned';
 function teamV(e){
  return `<div class="card"><h3>Add core team member</h3><form id="tmf" class="two">
@@ -268,5 +270,7 @@ render();
 <script src="vendor/firebase-firestore-compat.js"></script>
 <script src="sync.js"></script>
 <script src="app2.js"></script>
+<script src="chat.js"></script>
 <script src="ui.js"></script>
+<script src="splash.js"></script>
 </body></html>

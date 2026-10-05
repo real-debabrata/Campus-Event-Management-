@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="splash.css">
 <title>Make a payment</title>
 <style>
 :root{box-sizing:border-box;--ink:#14213d;--mute:#5b6678;--line:#d9e0ea;--acc:#4f6bff}
@@ -26,10 +27,13 @@ button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:11px 14p
 .err{color:#c2331f;min-height:18px;font-size:13px;margin:8px 0 0}
 .ok{text-align:center}.ok b{font-size:44px;display:block;color:#12805c}
 </style></head><body>
+<div id="splash" role="status" aria-label="Loading Campus Events"><div class="sp-logo"><i class="sp-ring"></i><div class="sp-mark"><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lgs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" fill="url(#lgs)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg></div></div><div class="sp-name">Campus Events</div><div class="sp-sub">Getting your events ready</div><div class="sp-bar"><i></i></div></div>
 <main>
 <div class="brand"><svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#g)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg>Campus Events</div>
 <div id="root"><div class="card"><p class="meta">Loading payment page...</p></div></div>
 </main>
+<script>window.SPLASH_HOLD=1</script>
+<script src="splash.js"></script>
 <script src="firebase-config.js"></script>
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-firestore-compat.js"></script>
@@ -38,14 +42,14 @@ button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:11px 14p
 const $=id=>document.getElementById(id),root=$('root');
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fid=new URLSearchParams(location.search).get('f'),C=window.FB_CONFIG||{};
-const fail=m=>{root.innerHTML='<div class="card"><h1>Payment page unavailable</h1><p class="meta">'+esc(m)+'</p></div>'};
+const fail=m=>{root.innerHTML='<div class="card"><h1>Payment page unavailable</h1><p class="meta">'+esc(m)+'</p></div>';window.splashDone&&splashDone()};
 if(!fid||!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey))fail('This payment link is incomplete or not set up.');
 else{
  firebase.initializeApp(C);const db=firebase.firestore();
  db.collection('payforms').doc(fid).get().then(d=>d.exists?show(d.data()):fail('This payment link is no longer available.')).catch(()=>fail('Could not load this page. Check your connection and try again.'));
 }
 function show(f){
- document.title='Pay: '+f.title;
+ document.title='Pay: '+f.title;setTimeout(()=>window.splashDone&&splashDone(),0);
  const link='upi://pay?pa='+encodeURIComponent(f.upi)+'&pn='+encodeURIComponent(f.payee||'')+(f.amt?'&am='+f.amt:'')+'&cu=INR&tn='+encodeURIComponent(f.title);
  let svg='';try{const q=qrcode(0,'M');q.addData(link);q.make();svg=q.createSvgTag(8,4)}catch(e){}
  root.innerHTML=`<div class="card"><p class="meta">${esc(f.evName||'')}</p><h1>${esc(f.title)}</h1>${f.note?`<p class="meta">${esc(f.note)}</p>`:''}

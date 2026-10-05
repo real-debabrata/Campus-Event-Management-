@@ -10,13 +10,16 @@ const pn=(e,id)=>id==='me'?'Me':(people(e).find(p=>p.id===id)||{n:'Unassigned'})
 const canTick=(e,k)=>can(e,'tasks')||mineIds(e).includes(k.who);
 const assignees=e=>{let l=can(e,'tasks')?people(e):people(e).filter(p=>mineIds(e).includes(p.id));if(!e.cloud)l=[{id:'me',n:'Me'},...l];return [...l].sort((a,b)=>(b.id===me())-(a.id===me()))};
 const st=document.createElement('style');
-st.textContent='.st-pending{color:var(--mute)}.st-verified{color:var(--ok);font-weight:700}.st-rejected{color:var(--bad);font-weight:700}td select{padding:4px 6px}';document.head.append(st);
+st.textContent='.st-pending{color:var(--mute)}.st-verified{color:var(--ok);font-weight:700}.st-rejected{color:var(--bad);font-weight:700}td select{padding:4px 6px}.tkw{border-bottom:1px solid var(--line)}.tdb{margin:2px 0 8px 26px;padding:8px 10px;background:var(--bg);border-left:3px solid var(--acc);border-radius:6px;white-space:pre-wrap;font-size:14px;overflow-wrap:anywhere}.tdb textarea{white-space:pre-wrap}';document.head.append(st);
 
 const row=(e,k,del)=>{
  const own=assignees(e),ok=canTick(e,k);
  const opts=(own.some(x=>x.id===k.who)?own:[{id:k.who,n:pn(e,k.who)},...own]).map(x=>`<option value="${x.id}" ${x.id===k.who?'selected':''}>${esc(x.n)}</option>`).join('');
  const who=ok?`<select data-ra="${e.id}|${k.id}" aria-label="Assigned to" style="max-width:150px;padding:4px 6px">${opts}</select>`:`<span class="meta">${esc(pn(e,k.who))}</span>`;
- return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-mt="${e.id}|${k.id}" ${k.done?'checked':''} ${ok?'':'disabled'} aria-label="Mark done"><span style="flex:1;min-width:120px;${k.done?'text-decoration:line-through;color:var(--mute)':''}">${esc(k.t)}</span>${who}<span class="meta">${k.due?'due '+k.due:''}</span>${del&&(can(e,'tasks')||k.by===me())?`<button class="btn ghost sm del" data-tkdel="${k.id}">Delete</button>`:''}</div>`};
+ const key=e.id+'|'+k.id,open=(V.td||{})[key],canEd=can(e,'tasks')||k.by===me();
+ const bt=k.desc?`<button class="btn ghost sm" data-td="${key}" aria-expanded="${open?'true':'false'}">Brief ${open?'&#9652;':'&#9662;'}</button>`:(canEd?`<button class="btn ghost sm" data-tde="${key}">+ Brief</button>`:'');
+ const body=V.te===key?`<div class="tdb"><textarea id="tdx" rows="4" maxlength="600" placeholder="What should the assignee know? Steps, links, deadlines..." aria-label="Task description">${esc(k.desc||'')}</textarea><div class="row" style="margin-top:6px"><button class="btn sm" data-tds="${key}">Save</button><button class="btn ghost sm" data-tdc="1">Cancel</button></div></div>`:(open&&k.desc?`<div class="tdb">${esc(k.desc)}${canEd?`<div style="margin-top:6px"><button class="btn ghost sm" data-tde="${key}">Edit brief</button></div>`:''}</div>`:'');
+ return `<div class="tkw"><div class="row" style="padding:6px 0"><input type="checkbox" data-mt="${e.id}|${k.id}" ${k.done?'checked':''} ${ok?'':'disabled'} aria-label="Mark done"><span style="flex:1;min-width:120px;${k.done?'text-decoration:line-through;color:var(--mute)':''}">${esc(k.t)}</span>${who}<span class="meta">${k.due?'due '+k.due:''}</span>${bt}${del&&(can(e,'tasks')||k.by===me())?`<button class="btn ghost sm del" data-tkdel="${k.id}">Delete</button>`:''}</div>${body}</div>`};
 window.mineCount=()=>{let n=0;S.events.forEach(e=>{const ids=mineIds(e);n+=(e.tasks||[]).filter(k=>!k.done&&ids.includes(k.who)).length});return n?' ('+n+')':''};
 window.mine=()=>{
  const b=S.events.map(e=>{const ids=mineIds(e),ts=(e.tasks||[]).filter(k=>ids.includes(k.who));return ts.length?`<div class="card"><h3>${esc(e.name)}</h3>${ts.map(k=>row(e,k,0)).join('')}</div>`:''}).join('');
@@ -31,7 +34,7 @@ window.tasksV2=function(e){
  ${can(e,'tasks')?`<form id="grf" class="row" style="margin-top:12px"><input name="n" required placeholder="New task group, e.g. Logistics" style="flex:1;min-width:160px"><button class="btn" type="submit">Add group</button><button type="button" class="btn ghost" data-grstd="1">Add standard groups</button></form>`:''}</div>
  ${e.groups.map(g=>{const gt=all.filter(k=>k.gid===g.id);return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(g.n)}</h3><span class="meta">${gt.filter(k=>k.done).length}/${gt.length} done ${can(e,'tasks')?`<button class="btn ghost sm del" data-grdel="${g.id}">Delete group</button>`:''}</span></div>
  ${vis.filter(k=>k.gid===g.id).map(k=>row(e,k,1)).join('')||'<p class="meta">No tasks here.</p>'}
- ${can(e,'write')?`<form class="row tk2" data-gid="${g.id}" style="margin-top:10px"><input name="t" required placeholder="New task" style="flex:2;min-width:140px"><select name="w" style="flex:1;min-width:120px">${opts}</select><input name="d" type="date" style="flex:1;min-width:130px"><button class="btn sm" type="submit">Add task</button></form>`:''}</div>`}).join('')||'<div class="empty">No task groups yet.</div>'}`;
+ ${can(e,'write')?`<form class="row tk2" data-gid="${g.id}" style="margin-top:10px"><input name="t" required placeholder="New task" style="flex:2;min-width:140px"><select name="w" style="flex:1;min-width:120px">${opts}</select><input name="d" type="date" style="flex:1;min-width:130px"><textarea name="x" rows="2" maxlength="600" placeholder="Description for the assignee (optional)" aria-label="Task description" style="flex:1 1 100%"></textarea><button class="btn sm" type="submit">Add task</button></form>`:''}</div>`}).join('')||'<div class="empty">No task groups yet.</div>'}`;
 };
 window.peopleV=function(e){
  const mr=myRole(e),asg=mr==='owner'?['manager','treasurer','lead','member','viewer']:['treasurer','lead','member','viewer'];
@@ -69,6 +72,11 @@ window.payV2=function(e){
 document.addEventListener('click',x=>{
  const t=x.target.closest('button');if(!t)return;const D=t.dataset,E=cur();
  if(D.tm!==undefined){V.tm=D.tm==='1';render()}
+ else if(D.td){V.td=V.td||{};V.td[D.td]=!V.td[D.td];render()}
+ else if(D.tde){V.td=V.td||{};V.td[D.tde]=1;V.te=D.tde;render();const a=document.getElementById('tdx');if(a)a.focus()}
+ else if(D.tdc){V.te=null;render()}
+ else if(D.tds){const q=D.tds.split('|'),e1=S.events.find(z=>z.id===q[0]),k=e1&&e1.tasks.find(z=>z.id===q[1]);
+  if(k&&(can(e1,'tasks')||k.by===me())){const v=(document.getElementById('tdx').value||'').replace(/\r/g,'').replace(/\n{3,}/g,'\n\n').trim().slice(0,600);if(v)k.desc=v;else delete k.desc;V.te=null;V.td=V.td||{};V.td[D.tds]=!!v;sv()}}
  else if(D.rmm&&E){if(confirm('Remove this member from the event?'))window.rmMember(E.id,D.rmm)}
  else if(D.shl){if(navigator.share)navigator.share({title:D.t,url:D.shl}).catch(()=>{});else{try{navigator.clipboard.writeText(D.shl);toast('Link copied')}catch(q){}}}
  else if(D.act&&E){const k=D.act;
@@ -88,7 +96,7 @@ document.addEventListener('submit',x=>{
  if(f.id==='pfc'){if(!E.cloud)return;const id=(uid()+uid()).slice(0,12),fm={id,title:g('t'),amt:+g('a')||0,upi:g('u'),payee:g('p'),note:g('n'),by:me(),byName:myName(),at:Date.now()};E.forms.push(fm);E.pay=Object.assign(E.pay||{},{upi:g('u'),payee:g('p')});window.pubForm(fm,E);sv();toast('Payment link created')}
  else if(f.id==='pbf'){try{localStorage.setItem('pay-base',g('b').replace(/\/?$/,'/'))}catch(q){}render()}
  else if(f.classList.contains('tk2')){const w=g('w')||me();if(!assignees(E).some(a=>a.id===w))return toast('You can only assign to yourself or your subordinates');
-  E.tasks.push({id:uid(),gid:f.dataset.gid,t:g('t'),who:w,due:g('d'),done:false,by:me()});sv();toast('Task added')}
+  const dsc=g('x').replace(/\r/g,'').replace(/\n{3,}/g,'\n\n').slice(0,600),tk={id:uid(),gid:f.dataset.gid,t:g('t'),who:w,due:g('d'),done:false,by:me()};if(dsc)tk.desc=dsc;E.tasks.push(tk);sv();toast('Task added')}
  else if(f.id==='mbf'){E.team.push({id:uid(),n:g('n'),r:g('r')||'Member',p:g('p'),boss:can(E,'people')?g('b'):me()});sv();toast('Added')}
 });
 })();

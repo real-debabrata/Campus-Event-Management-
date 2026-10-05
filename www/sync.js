@@ -2,7 +2,7 @@
 const C=window.FB_CONFIG||{};
 const ready=!!(window.firebase&&C.apiKey&&!/YOUR_/.test(C.apiKey));
 const LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
-let P=Object.assign({tasks:1,people:1,money:1,event:1,ntfy:0},LS('campus-prefs',{}));
+let P=Object.assign({tasks:1,people:1,money:1,event:1,chat:1,ntfy:0},LS('campus-prefs',{}));
 let N=LS('campus-notes',[]);
 let U=null,db,unsub,applying=false;const sent={},owners={};
 const KEYS=['info','team','groups','tasks','teams','don','pay','regs','forms','payments'],MAPK=['forms','payments'];
@@ -69,6 +69,7 @@ function diff(o,n,who){
 }
 const badge=()=>{const b=document.getElementById('tb');if(b)b.textContent=N.length?'('+N.length+')':''};
 
+window.notify=notify;   // used by chat.js
 // ---------- apply remote data ----------
 function apply(id,d){
  let e=S.events.find(x=>x.id===id);const old=e?snapOf(e):null;
@@ -84,11 +85,11 @@ function listen(){
   const msgs=[];
   snap.docChanges().forEach(c=>{
    const id=c.doc.id,d=c.doc.data();
-   if(c.type==='removed'){delete sent[id];S.events=S.events.filter(e=>e.id!==id);S.regs=S.regs.filter(r=>r.eid!==id);return}
+   if(c.type==='removed'){delete sent[id];S.events=S.events.filter(e=>e.id!==id);S.regs=S.regs.filter(r=>r.eid!==id);window.chatDrop&&chatDrop(id);return}
    const old=apply(id,d);
    if(old&&!first&&!c.doc.metadata.hasPendingWrites)diff(old,snapOf(S.events.find(e=>e.id===id)),me()).forEach(m=>msgs.push(Object.assign(m,{n:d.info.name})));
   });
-  first=false;persist();render();watchSubs();if(msgs.length)notify(msgs);
+  first=false;persist();render();watchSubs();window.chatSync&&chatSync();if(msgs.length)notify(msgs);
  },err);
 }
 
@@ -99,7 +100,7 @@ function flush(){
  Object.keys(sent).forEach(id=>{
   if(S.events.some(e=>e.id===id))return;
   const ref=db.collection('events').doc(id);delete sent[id];
-  if(owners[id]===U.uid)ref.delete().catch(err);
+  if(owners[id]===U.uid)(window.chatPurge?chatPurge(id):Promise.resolve()).then(()=>ref.delete()).catch(x=>{err(x);listen()});   // chat messages go first, then the event; on failure the event comes back
   else ref.update({['members.'+U.uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(U.uid)}).catch(err);
  });
  S.events.filter(e=>e.cloud&&sent[e.id]).forEach(e=>{
@@ -170,7 +171,7 @@ function panel(){
  if(!U){tp.innerHTML='<p class="meta">Not signed in.</p>';return}
  tp.innerHTML=`<h3>${esc(U.displayName||'Member')}</h3><p class="meta">${esc(U.email)}</p>
  <label>Join an event</label><div class="row"><input id="jc" placeholder="Event code" style="flex:1;text-transform:uppercase"><button class="btn" id="jb">Join</button></div>
- <label>Notify me about</label><div class="row">${[['tasks','Tasks'],['people','People'],['money','Money'],['event','Event changes']].map(k=>`<label style="margin:0"><input type="checkbox" data-p="${k[0]}" ${P[k[0]]?'checked':''}> ${k[1]}</label>`).join('')}</div>
+ <label>Notify me about</label><div class="row">${[['tasks','Tasks'],['people','People'],['money','Money'],['event','Event changes'],['chat','Chat messages']].map(k=>`<label style="margin:0"><input type="checkbox" data-p="${k[0]}" ${P[k[0]]?'checked':''}> ${k[1]}</label>`).join('')}</div>
  <label><input type="checkbox" data-p="ntfy" ${P.ntfy?'checked':''}> Also send my changes to the event's ntfy topic</label>
  <h3 style="margin-top:14px">Recent updates</h3>${N.length?N.slice(0,15).map(n=>`<div class="meta" style="padding:4px 0;border-bottom:1px solid var(--line)">${esc(n.text)}</div>`).join(''):'<p class="meta">Nothing yet.</p>'}
  <div class="row" style="margin-top:12px"><button class="btn ghost sm" id="clr">Clear updates</button><button class="btn ghost sm del" id="so">Sign out</button></div>`;
@@ -208,7 +209,7 @@ if(ready){
  firebase.auth().onAuthStateChanged(u=>{
   U=u;window.MYUID=u?u.uid:'';window.MYNAME=u?(u.displayName||u.email.split('@')[0]):'';
   if(u){document.documentElement.classList.remove('gate');askPerm();listen();render()}
-  else{if(unsub)unsub();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}
+  else{if(unsub)unsub();window.chatDrop&&chatDrop();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}
  });
 }
 })();
