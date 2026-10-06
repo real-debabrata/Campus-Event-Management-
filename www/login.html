@@ -30,6 +30,9 @@ input:focus-visible,button:focus-visible{outline:2px solid #4f6bff;outline-offse
 .lnk{background:none;border:0;color:#4f6bff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-top:10px}
 #msg{min-height:20px;font-size:13px;margin:10px 0 0;color:var(--bad)}#msg.ok{color:#12805c}
 .hide{display:none}
+.otp{letter-spacing:.5em;text-align:center;font-size:22px;font-weight:700;padding-left:calc(12px + .5em)}
+#cf{margin-top:12px}#cf:empty{margin:0}
+.lnk.sm{display:block;margin-top:8px}.lnk:disabled{color:var(--mute);cursor:default}
 @media(max-width:760px){body{grid-template-columns:1fr}.hero{padding:28px 22px 4px}ul,.hero p{display:none}}
 </style></head><body>
 <div id="splash" role="status" aria-label="Loading Campus Events"><div class="sp-logo"><i class="sp-ring"></i><div class="sp-mark"><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lgs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" fill="url(#lgs)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg></div></div><div class="sp-name">Campus Events</div><div class="sp-sub">Getting your events ready</div><div class="sp-bar"><i></i></div></div>
@@ -42,43 +45,105 @@ input:focus-visible,button:focus-visible{outline:2px solid #4f6bff;outline-offse
 <section class="pane"><div class="glass">
  <h2 id="ttl">Welcome back</h2><p class="meta" id="sub">Sign in to your workspace.</p>
  <div class="seg"><button id="t-in" class="on">Sign in</button><button id="t-up">Create account</button></div>
+ <div id="frm">
  <div id="nmw" class="hide"><label for="nm">Your name</label><input id="nm" autocomplete="name"></div>
  <label for="em">Email</label><input id="em" type="email" autocomplete="email" inputmode="email">
  <label for="pw">Password</label><div class="pw"><input id="pw" type="password" autocomplete="current-password"><button type="button" id="sh">Show</button></div>
+ </div>
+ <div id="otpw" class="hide"><label for="otp">Verification code</label><input id="otp" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="------">
+  <p class="meta" id="otsub"></p>
+  <button type="button" class="lnk sm" id="rs">Resend code</button><button type="button" class="lnk sm" id="ce">Use a different email</button></div>
+ <div id="cf"></div>
  <p id="msg" role="alert"></p>
  <button class="go" id="go">Sign in</button>
  <button class="lnk" id="fp">Forgot password?</button>
- <p class="meta" style="margin-top:14px">The first sign-in needs internet. After that, the app keeps working offline.</p>
+ <p class="meta" style="margin-top:14px">The first sign-in needs internet. After that, the app keeps working offline. New accounts are confirmed with a code sent to your email; signing in never asks for one.</p>
 </div></section>
 <script src="firebase-config.js"></script>
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script>
 const $=id=>document.getElementById(id),C=window.FB_CONFIG||{};
-let mode='in',busy=false;
+const API=String(window.OTP_API||'').replace(/\/+$/,''),TSK=window.TURNSTILE_SITE_KEY||'';
+const otpReady=!!API&&!/YOUR_/.test(API);
+let mode='in',step='form',busy=false,tsTok='',tsId=null,tsLoading=false,cd=0,cdT=null;
 const msg=(t,ok)=>{$('msg').textContent=t;$('msg').className=ok?'ok':''};
 if(!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey)){msg('Sign-in is not set up yet. Add your Firebase config to firebase-config.js.');$('go').disabled=true}
 else{
  firebase.initializeApp(C);const auth=firebase.auth();
  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
  auth.onAuthStateChanged(u=>{if(u&&!busy)location.replace('index.html')});
- const friendly=e=>({'auth/invalid-credential':'Incorrect email or password.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account found for this email.','auth/email-already-in-use':'An account with this email already exists. Try signing in.','auth/weak-password':'Use a password with at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/network-request-failed':'No connection. Signing in needs internet the first time.','auth/too-many-requests':'Too many attempts. Wait a moment and try again.'}[e.code]||'Something went wrong. Please try again.');
+ const friendly=e=>({'auth/invalid-credential':'Incorrect email or password.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account found for this email.','auth/email-already-in-use':'An account with this email already exists. Try signing in.','auth/weak-password':'Use a password with at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/network-request-failed':'No connection. Signing in needs internet the first time.','auth/too-many-requests':'Too many attempts. Wait a moment and try again.'}[e.code]||e.message||'Something went wrong. Please try again.');
+ // Calls the sign-up OTP service (worker/otp-worker.js). It answers {ok:true} or {ok:false,message}.
+ const post=async(path,body)=>{
+  let r,j={};
+  try{r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+  catch(e){throw{message:'No connection. Creating an account needs internet.'}}
+  try{j=await r.json()}catch(e){}
+  if(!r.ok||!j.ok)throw{message:j.message||'Something went wrong. Please try again.',retry:j.retryAfter};
+  return j;
+ };
+ const refreshRs=()=>{$('rs').disabled=cd>0||(!!TSK&&!tsTok);$('rs').textContent=cd>0?'Resend code in '+cd+'s':'Resend code'};
+ const startCd=n=>{clearInterval(cdT);cd=n;refreshRs();cdT=setInterval(()=>{cd=Math.max(0,cd-1);refreshRs();if(!cd)clearInterval(cdT)},1000)};
+ // Cloudflare Turnstile (optional free captcha): loaded only when a site key is set, and only for sign-up.
+ const ensureTs=()=>{
+  if(!TSK||tsId!==null||tsLoading)return;tsLoading=true;
+  const draw=()=>{tsId=window.turnstile.render('#cf',{sitekey:TSK,callback:t=>{tsTok=t;refreshRs()},'expired-callback':()=>{tsTok='';refreshRs()},'error-callback':()=>{tsTok='';refreshRs()}})};
+  if(window.turnstile)return draw();
+  const s=document.createElement('script');s.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';s.async=true;s.onload=draw;s.onerror=()=>{tsLoading=false;msg('Could not load the security check. Check your connection and reopen this page.')};
+  document.head.appendChild(s);
+ };
+ const resetTs=()=>{tsTok='';if(TSK&&tsId!==null&&window.turnstile)try{window.turnstile.reset(tsId)}catch(e){}};
+ const showStep=s=>{step=s;const o=s==='otp',up=mode==='up';
+  $('frm').className=o?'hide':'';$('otpw').className=o?'':'hide';$('cf').className=up?'':'hide';
+  $('go').textContent=!up?'Sign in':o?'Verify and create account':'Send verification code';
+  $('fp').className=up?'lnk hide':'lnk';
+  $('ttl').textContent=o?'Check your email':up?'Create your account':'Welcome back';
+  $('sub').textContent=o?'Enter the 6-digit code to finish.':up?'Join in under a minute.':'Sign in to your workspace.';
+  $('otsub').textContent=o?'We sent a code to '+$('em').value.trim()+'. It expires in 10 minutes. Check spam if you do not see it.':'';
+  if(o)$('otp').focus()};
  const setMode=m=>{mode=m;const up=m==='up';$('t-in').className=up?'':'on';$('t-up').className=up?'on':'';$('nmw').className=up?'':'hide';
-  $('ttl').textContent=up?'Create your account':'Welcome back';$('sub').textContent=up?'Join in under a minute.':'Sign in to your workspace.';
-  $('go').textContent=up?'Create account':'Sign in';$('fp').className=up?'lnk hide':'lnk';$('pw').autocomplete=up?'new-password':'current-password';msg('')};
+  $('pw').autocomplete=up?'new-password':'current-password';$('otp').value='';clearInterval(cdT);cd=0;showStep('form');msg('');
+  if(up){if(!otpReady)msg('Sign-up is not set up yet. Add the OTP service address (OTP_API) to firebase-config.js.');else ensureTs()}};
  $('t-in').onclick=()=>setMode('in');$('t-up').onclick=()=>setMode('up');
  $('sh').onclick=()=>{const p=$('pw'),s=p.type==='password';p.type=s?'text':'password';$('sh').textContent=s?'Hide':'Show'};
- $('go').onclick=async()=>{
-  const em=$('em').value.trim(),pw=$('pw').value,nm=$('nm').value.trim();
-  if(!em||!pw)return msg('Enter your email and password.');
-  if(mode==='up'&&!nm)return msg('Enter your name.');
+ const fields=()=>({em:$('em').value.trim(),pw:$('pw').value,nm:$('nm').value.trim()});
+ // Step 1 of sign-up: ask the service to email a code. No account exists yet.
+ const sendCode=async(again)=>{
+  const {em,pw,nm}=fields();
+  if(!otpReady)return msg('Sign-up is not set up yet. Add the OTP service address (OTP_API) to firebase-config.js.');
+  if(!nm)return msg('Enter your name.');if(!em||!pw)return msg('Enter your email and password.');
+  if(pw.length<6)return msg('Use a password with at least 6 characters.');
+  if(TSK&&!tsTok)return msg('Please wait a moment for the security check to finish, then try again.');
+  busy=true;$('go').disabled=true;$('rs').disabled=true;msg('');
+  try{
+   const j=await post('/send',{email:em,name:nm,cf:tsTok});
+   showStep('otp');startCd(j.retryAfter||60);msg(again?'A new code is on its way.':'Code sent.',true);
+  }catch(e){if(e.retry)startCd(e.retry);msg(e.message)}
+  finally{busy=false;$('go').disabled=false;resetTs();refreshRs()}
+ };
+ // Step 2: prove the code. The service creates the account, then we sign in as usual.
+ const verifyCode=async()=>{
+  const {em,pw,nm}=fields(),code=$('otp').value.replace(/\D/g,'');
+  if(code.length!==6)return msg('Enter the 6-digit code.');
   busy=true;$('go').disabled=true;msg('');
   try{
-   if(mode==='in')await auth.signInWithEmailAndPassword(em,pw);
-   else{const c=await auth.createUserWithEmailAndPassword(em,pw);await c.user.updateProfile({displayName:nm})}
+   await post('/verify',{email:em,name:nm,password:pw,code});
+   await auth.signInWithEmailAndPassword(em,pw);
    location.replace('index.html');
   }catch(e){busy=false;$('go').disabled=false;msg(friendly(e))}
  };
+ const signIn=async()=>{
+  const {em,pw}=fields();
+  if(!em||!pw)return msg('Enter your email and password.');
+  busy=true;$('go').disabled=true;msg('');
+  try{await auth.signInWithEmailAndPassword(em,pw);location.replace('index.html')}
+  catch(e){busy=false;$('go').disabled=false;msg(friendly(e))}
+ };
+ $('go').onclick=()=>mode==='in'?signIn():step==='form'?sendCode(false):verifyCode();
+ $('rs').onclick=()=>sendCode(true);
+ $('ce').onclick=()=>{clearInterval(cdT);cd=0;$('otp').value='';showStep('form');msg('')};
+ $('otp').oninput=e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,6)};
  $('fp').onclick=async()=>{
   const em=$('em').value.trim();if(!em)return msg('Type your email above first.');
   try{await auth.sendPasswordResetEmail(em);msg('Password reset link sent to '+em+'.',true)}catch(e){msg(friendly(e))}
