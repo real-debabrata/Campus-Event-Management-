@@ -13,7 +13,7 @@ window.PAY_BASE = "https://cem.deba.indevs.in/";
 
 // Sign-up OTP service: the address of your Cloudflare Worker (worker/otp-worker.js), no trailing slash.
 // Until you replace this, "Create account" is blocked on purpose. Setup steps: SETUP.md > "Upgrade to 3.2.0".
-window.OTP_API = "https://cem-otp.YOUR_SUBDOMAIN.workers.dev";
+window.OTP_API = "https://cem-otp.deb69096909.workers.dev";
 // Optional free captcha (Cloudflare Turnstile) in front of "Send verification code". Paste the SITE key, or leave empty.
 // If you fill this in, also add the matching secret key as TURNSTILE_SECRET in the Worker.
 window.TURNSTILE_SITE_KEY = "";
