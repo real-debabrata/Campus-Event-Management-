@@ -40,7 +40,7 @@ jobs:
       - run: npx cap sync android
 
       - name: Set version and signing in build.gradle
-        run: scripts/patch-android.sh
+        run: bash scripts/patch-android.sh
 
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
 
