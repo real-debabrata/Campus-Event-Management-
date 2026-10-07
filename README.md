@@ -35,10 +35,11 @@ Runs as an Android app (APK built by GitHub, no installs) and as a website. Ever
 
 ## Build the APK
 ### Option A: no installs, GitHub builds it for you
-1. Create a new GitHub repository and upload everything in this folder (keep the .github folder).
-2. Open the Actions tab, pick "Build APK", click Run workflow (it also runs on every push to main).
-3. When it finishes (about 5 minutes), download "campus-events-apk" from the run page and unzip it.
-4. Copy app-debug.apk to your phone and open it. Allow "Install unknown apps" if asked.
+1. Create a new GitHub repository and upload everything in this folder (keep the .github and scripts folders).
+2. **One time only:** create the permanent signing key (see "APK updates and signing" below). Without it the build stops with a clear error.
+3. Open the Actions tab, pick "Build APK", click Run workflow (it also runs on every push to main).
+4. When it finishes (about 5 minutes), download "campus-events-apk" from the run page and unzip it.
+5. Copy campus-events-vX.Y.Z.apk to your phone and open it. Allow "Install unknown apps" if asked. Over an older version it shows "Update", not "Install".
 
 ### Option B: build on your computer
 Needs Node 20, JDK 17 and Android Studio.
@@ -47,6 +48,46 @@ Needs Node 20, JDK 17 and Android Studio.
     npx cap add android
     npx cap sync android
     npx cap open android     (then Build > Build APK)
+
+## APK updates and signing
+Android installs a new APK **over** the installed app only when all three are true:
+1. same package name (`com.campus.events`),
+2. signed with the **same key** as the installed app,
+3. a **higher `versionCode`** than the installed app.
+
+If any one fails, the phone shows "App not installed as package conflicts with an existing package", "package already installed" or just refuses the update.
+
+### What was wrong and what changed
+- The old workflow printed only a warning when the signing key was missing and carried on, so that build got a **random key**. Every build with a random key is a different "developer" to Android and can never update the previous one. It now **stops with an error** instead.
+- The key was found only through the hidden default path `~/.android/debug.keystore`. `scripts/patch-android.sh` now writes the key path into `android/app/build.gradle` explicitly.
+- `versionCode` used GitHub's `run_number`, which does not rise on a re-run and restarts at 1 in a new or copied repository, so a new APK could look older than the installed one. It is now the number of minutes since 1970: it always goes up.
+- After building, the workflow runs `apksigner` and **fails if the APK is not signed with the permanent key**. The run summary shows the certificate fingerprint and the version code, so you can compare builds.
+
+### One-time setup of the permanent key
+1. Choose a long passphrase and **save it somewhere safe** (password manager). If it is lost, the key is lost.
+2. GitHub repository > Settings > Secrets and variables > Actions > New repository secret. Name: `KEYSTORE_PASSPHRASE`, value: your passphrase.
+3. Actions > **Create signing key (run once)** > Run workflow. It adds `signing/debug.keystore.gpg` (encrypted) to the repository. It refuses to overwrite an existing key. Never delete this file or change the secret afterwards.
+4. Actions > **Build APK** > Run workflow. In the run page, open the summary and note the **signing certificate SHA-256**. It must be the same on every later build.
+
+### One-time cleanup of the phone (only if updating already fails)
+An app installed from a build that used a random key (or a different key) can never be updated. Remove it once, then install the new APK:
+1. Optional: open the app and make sure your events are synced (shared events live in Firebase; events kept only on that phone are lost on uninstall).
+2. Long-press the app > Uninstall (or Settings > Apps > Campus Events > Uninstall). If you use several profiles or a work profile, uninstall it in each.
+3. Install the new `campus-events-vX.Y.Z.apk`.
+4. From now on every APK from this repository installs as an **update** and keeps your data.
+
+### Checks and troubleshooting
+| What you see | Cause and fix |
+| --- | --- |
+| Build fails at "Restore permanent signing key": secret missing | Add `KEYSTORE_PASSPHRASE` (step 2 above), then run the build again. |
+| Build fails: `signing/debug.keystore.gpg is missing` | Run "Create signing key (run once)". |
+| Build fails: `gpg: decryption failed` | The secret does not match the passphrase used to create the key. Put back the original passphrase. If it is lost, delete `signing/debug.keystore.gpg`, set a new secret, run "Create signing key" again, and do the phone cleanup above once. |
+| Build fails: `APK is NOT signed with the permanent key` | Something overrode the signing config. Check that `scripts/patch-android.sh` ran. |
+| Phone still says package conflict | The installed app was signed with a different key. Do the phone cleanup once. |
+| Phone says it cannot downgrade | The installed app has a higher `versionCode` than this APK (for example it came from a build made by someone else). Uninstall once. |
+| Check from a computer (USB debugging on) | `adb shell dumpsys package com.campus.events | grep -E "versionCode|versionName"` shows the installed version. |
+
+Notes: the app version people see (`APP_VERSION` in www/ui.js) and Android's `versionCode` are separate. Bump `APP_VERSION` for what users read; `versionCode` is set automatically on every build. If you build on your computer (Option B), make sure the same key is used, otherwise that APK cannot update one built by GitHub.
 
 ## Set up Firebase, chat and the website
 Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) and **"Upgrade to 3.2.0" (email-code sign-up)**).
@@ -65,6 +106,10 @@ Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade step
 | www/firebase-config.js | Your Firebase keys, plus `OTP_API` (address of the OTP Worker) and the optional `TURNSTILE_SITE_KEY` |
 | worker/otp-worker.js | Free Cloudflare Worker: emails the code, checks it, creates the account (new in 3.2.0). Never uploaded to the website; paste it into Cloudflare |
 | worker/wrangler.toml | Optional settings file, only if you deploy from the command line |
+| .github/workflows/build-apk.yml | Builds the APK with the permanent key, sets the version, verifies the signature |
+| .github/workflows/create-signing-key.yml | Run once: creates and encrypts the permanent key |
+| scripts/patch-android.sh | Writes the signing key path and an ever-increasing versionCode into the generated Android project |
+| signing/debug.keystore.gpg | Your encrypted permanent key. Never delete it |
 | firestore.rules | Security rules. Paste into Firebase console > Firestore > Rules |
 
 ## Notes
@@ -73,5 +118,5 @@ Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade step
 - **Sign-up codes and free limits.** Brevo's free plan sends 300 emails a day, so at most about 300 codes a day (a resend is another email). Cloudflare's free plan is 100,000 requests a day and 1,000 stored writes a day; each code request uses 2 of those writes, so roughly 400 requests a day before it pauses. Nothing but sign-up is affected when a limit is reached: sign-in goes straight to Firebase.
 - **What the code does and does not do.** It proves the person owns the email address and makes bulk sign-up slow and costly. It cannot stop someone who really owns many inboxes. Turn on the Turnstile captcha and `ALLOWED_EMAIL_DOMAINS` (for example your college domain) in the Worker for stronger protection.
 - Keep the Firebase service-account key and the Brevo key only as Cloudflare secrets. Never put them in this repository. The `worker/` folder is not part of the website or the APK.
-- The APK is a debug build for sideloading. For Play Store, create a signed release build.
+- The APK is a debug build for sideloading, signed with your permanent key so it updates in place. For Play Store, create a separate signed release build.
 - To change the app, edit the files in www/, push to GitHub, and the workflow rebuilds the APK. Bump `APP_VERSION` in www/ui.js on every release.
