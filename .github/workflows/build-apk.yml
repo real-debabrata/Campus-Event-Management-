@@ -31,7 +31,7 @@ jobs:
           keytool -list -keystore "$RUNNER_TEMP/cem.keystore" -storepass android -alias androiddebugkey > "$RUNNER_TEMP/keytool.txt"
           cat "$RUNNER_TEMP/keytool.txt"
           echo "CEM_KEYSTORE=$RUNNER_TEMP/cem.keystore" >> "$GITHUB_ENV"
-          KEY_SHA=$(grep -oiE 'SHA-?256[)]?: *[0-9A-F:]+' "$RUNNER_TEMP/keytool.txt" | head -1 | sed 's/^[^:]*: *//' | tr -d ':' | tr 'A-F' 'a-f')
+          KEY_SHA=$(grep -oiE '([0-9A-F]{2}:){31}[0-9A-F]{2}' "$RUNNER_TEMP/keytool.txt" | head -1 | tr -d ':' | tr 'A-F' 'a-f')
           [ -n "$KEY_SHA" ] || { echo "::error::Could not read the key fingerprint"; exit 1; }
           echo "KEY_SHA=$KEY_SHA" >> "$GITHUB_ENV"
 
@@ -50,7 +50,7 @@ jobs:
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs "$APK" | tee "$RUNNER_TEMP/apk-certs.txt"
-          APK_SHA=$(grep -i 'certificate SHA-256 digest' "$RUNNER_TEMP/apk-certs.txt" | head -1 | sed 's/^[^:]*: *//' | tr 'A-F' 'a-f')
+          APK_SHA=$(grep -i 'certificate SHA-256 digest' "$RUNNER_TEMP/apk-certs.txt" | grep -oiE '[0-9A-F]{64}' | head -1 | tr 'A-F' 'a-f')
           if [ "$APK_SHA" != "$KEY_SHA" ]; then
             echo "::error::APK is NOT signed with the permanent key ($APK_SHA vs $KEY_SHA)"; exit 1
           fi
