@@ -1,15 +1,26 @@
-# Campus Events (CEM) 3.2.0
+# Campus Events (CEM) 3.3.0
 
 Plan campus events with your team: registrations, tasks, roles, UPI payment links, a chat inside every event and now expenses.
 Runs as an Android app (APK built by GitHub, no installs) and as a website. Everything fits in the free plans of GitHub and Firebase (Spark).
 
-## What's new in 3.2.0
+## What's new in 3.3.0
+- **Sign in or sign up with Google**, on the website and inside the Android app. One tap, no password, no emailed code (Google has already confirmed the address). Email and password still work exactly as before.
+  - **Website:** a Google pop-up (it switches to a full-page redirect if the browser blocks pop-ups).
+  - **Android app:** a pop-up cannot work inside an app, so the app uses the free `@capacitor-firebase/authentication` plugin to get a Google token and signs in to Firebase with it. The rest of the app is unchanged.
+  - **Free, no card:** Google sign-in is part of Firebase Authentication on the Spark plan. Do not upgrade to "Identity Platform".
+- **Firebase's public sign-up must be switched back ON.** Google can only create new accounts while it is on. The bot protection that 3.2.0 got from switching it off now comes from `firestore.rules`: the database accepts only accounts with a **confirmed email**. Google accounts and OTP-Worker accounts are always confirmed; a bot-made account never is, so it can read and write nothing.
+- **Old email accounts** that were created before the code step existed (never confirmed) get a Firebase confirmation link the next time they sign in, then sign in again. This is free and built in.
+- Sign-out also forgets the Google account in the APK, so the next sign-in shows the account chooser.
+- New helper workflow **Show signing key fingerprint (SHA-1)**, because Firebase needs that SHA-1 for Google sign-in in the APK.
+- Setup: **SETUP.md > Upgrade to 3.3.0** (about 25 minutes). Until the Android part is done, the website works and the APK still builds; only the Google button inside the APK will not work.
+
+## What was new in 3.2.0
 - **Email code (OTP) when creating an account.** Choose "Create account", enter name, email and password, and a 6-digit code is emailed to you. The account exists only after you type the code. **Signing in never asks for a code.**
-  - Stops bots and mass junk accounts: nobody can create an account without a real inbox, and Firebase's own public sign-up is switched off so the code step cannot be skipped.
+  - Stops bots and mass junk accounts: nobody can create an account without a real inbox, and (until 3.3.0) Firebase's own public sign-up was switched off so the code step could not be skipped. From 3.3.0 the database rules do that job instead; see above.
   - Extra guards: codes expire in 10 minutes, 5 wrong tries lock a code, one code per email per minute, 5 codes per email and 10 per network per hour, throwaway-mail domains (mailinator and similar) are refused, and an optional free captcha (Cloudflare Turnstile) and college-email-only mode can be switched on.
   - Still **free, no card**: a small Cloudflare Worker (`worker/otp-worker.js`) sends the code through Brevo (300 emails a day free) and creates the Firebase account. Firebase stays on the Spark plan; there are no Cloud Functions.
   - Setup is a one-time job of about 30 minutes: **SETUP.md > Upgrade to 3.2.0**. Until it is done, "Create account" shows "Sign-up is not set up yet" (sign-in keeps working).
-  - Old APKs (3.1.x) cannot create accounts once Firebase sign-up is switched off. Set `min` to `3.2.0` in Firestore > appconfig > version to ask people to update.
+  - Old APKs (3.1.x) cannot create accounts through the code flow. Set `min` to `3.2.0` (or `3.3.0`) in Firestore > appconfig > version to ask people to update.
 
 ## What was new in 3.1.0
 - **Expenses tab** (Event > Expenses).
@@ -90,7 +101,7 @@ An app installed from a build that used a random key (or a different key) can ne
 Notes: the app version people see (`APP_VERSION` in www/ui.js) and Android's `versionCode` are separate. Bump `APP_VERSION` for what users read; `versionCode` is set automatically on every build. If you build on your computer (Option B), make sure the same key is used, otherwise that APK cannot update one built by GitHub.
 
 ## Set up Firebase, chat and the website
-Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) and **"Upgrade to 3.2.0" (email-code sign-up)**).
+Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) **"Upgrade to 3.2.0" (email-code sign-up)** and **"Upgrade to 3.3.0" (Google sign-in)**).
 
 ## Files
 | Path | What it does |
@@ -102,17 +113,22 @@ Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade step
 | www/chat.js | Event chat, @tagging, full-screen layout |
 | www/ui.js | Menu bar, themes, version control. `APP_VERSION` lives here |
 | www/splash.css, www/splash.js | Animated logo loader (new in 2.0.0) |
-| www/login.html, www/pay.html | Sign-in and sign-up page (sign-up asks for an emailed code), public payment page |
+| www/login.html, www/pay.html | Sign-in and sign-up page (Google button; email sign-up asks for an emailed code), public payment page |
 | www/firebase-config.js | Your Firebase keys, plus `OTP_API` (address of the OTP Worker) and the optional `TURNSTILE_SITE_KEY` |
 | worker/otp-worker.js | Free Cloudflare Worker: emails the code, checks it, creates the account (new in 3.2.0). Never uploaded to the website; paste it into Cloudflare |
 | worker/wrangler.toml | Optional settings file, only if you deploy from the command line |
 | .github/workflows/build-apk.yml | Builds the APK with the permanent key, sets the version, verifies the signature |
 | .github/workflows/create-signing-key.yml | Run once: creates and encrypts the permanent key |
+| scripts/patch-google-signin.sh | Turns on the Google libraries in the generated Android project and writes `google-services.json` from the `GOOGLE_SERVICES_JSON` secret (new in 3.3.0) |
+| .github/workflows/show-key-fingerprint.yml | Run once: prints the SHA-1 of your permanent key for Firebase (new in 3.3.0) |
+| .npmrc | Stops npm from downloading an unused copy of the `firebase` package (new in 3.3.0) |
 | scripts/patch-android.sh | Writes the signing key path and an ever-increasing versionCode into the generated Android project |
 | signing/debug.keystore.gpg | Your encrypted permanent key. Never delete it |
-| firestore.rules | Security rules. Paste into Firebase console > Firestore > Rules |
+| firestore.rules | Security rules (3.3.0: only confirmed emails may use the database). Paste into Firebase console > Firestore > Rules |
 
 ## Notes
+- **Google sign-in and the confirmed-email rule (3.3.0).** `firestore.rules` has one switch, `requireVerifiedEmail()`, set to `true`. Leave it on. Turning it off while Firebase's public sign-up is on lets bots create accounts that can use your free Firestore quota.
+- **Google sign-in in the APK needs three things to line up:** the SHA-1 of your permanent key registered in Firebase, the Android app registered with package name `com.campus.events`, and the `GOOGLE_SERVICES_JSON` secret downloaded *after* the first two. Phones without Google Play services cannot use the Google button (email sign-in still works).
 - Event data is cached on the phone and synced through Firebase. Chat and payment links need a shared event.
 - Budget, vendors, payments and items are stored inside the event document. The app hides the money sections from members who are not organizer, manager or treasurer, but everyone in the event can technically read the event document. Do not share an event code with people you do not trust with the budget.
 - **Sign-up codes and free limits.** Brevo's free plan sends 300 emails a day, so at most about 300 codes a day (a resend is another email). Cloudflare's free plan is 100,000 requests a day and 1,000 stored writes a day; each code request uses 2 of those writes, so roughly 400 requests a day before it pauses. Nothing but sign-up is affected when a limit is reached: sign-in goes straight to Firebase.

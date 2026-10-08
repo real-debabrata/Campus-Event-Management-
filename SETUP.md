@@ -3,7 +3,7 @@
 ## 1. Firebase (free Spark plan, no card)
 1. console.firebase.google.com > Add project > "Campus Events".
 2. Project home > web icon (</>) > register an app. Copy the firebaseConfig values.
-3. Build > Authentication > Get started > enable Email/Password.
+3. Build > Authentication > Get started > enable Email/Password. (From 3.3.0 also enable Google: see "Upgrade to 3.3.0".)
 4. Build > Firestore Database > Create database > pick a nearby location > Production mode.
 5. Firestore > Rules tab > paste the contents of firestore.rules > Publish.
 
@@ -207,6 +207,8 @@ Set both or neither. The captcha has not been tested inside the Android app on a
 If it fails, see Troubleshooting below. Do not do step 7 until this works.
 
 **7. Switch off Firebase's public sign-up (this is what stops the bots)**
+> **Superseded in 3.3.0.** Google sign-in cannot create new users while this is switched off, so 3.3.0 asks you to switch it back **on** and moves the bot protection into `firestore.rules`. If you have not done this step yet, skip it and follow "Upgrade to 3.3.0" instead.
+
 1. Firebase console > Authentication > Settings > User actions > untick **Enable create (sign-up)** > Save.
 2. Test again: create another account through the app. It still works, because the Worker creates it with admin rights.
 3. Prove the back door is shut: open the login page, press F12 > Console and run
@@ -242,3 +244,110 @@ Old APKs (3.1.x) try to create accounts directly and now get an error. In Fireba
 - **Cloudflare KV storage:** 1,000 writes a day. A code request uses 2 and a wrong guess uses 1, so roughly 400 code requests a day. If a limit is reached, only creating accounts pauses until the next day (UTC midnight). Signing in is not affected.
 - **Firebase:** stays on Spark. Creating a user through the admin API costs no Firestore reads or writes.
 - Limits are checked against Cloudflare's storage, which can take up to about a minute to update between locations, so they are approximate. That is fine against a bot but not a guarantee against a determined person with many real inboxes: use the captcha and `ALLOWED_EMAIL_DOMAINS` for that.
+
+## Upgrade to 3.3.0: Google sign-up and sign-in, free
+
+Adds a **Continue with Google** button on the website and in the Android app. Email and password keep working.
+
+Everything is free and needs **no credit card**. Google sign-in is part of Firebase Authentication on the Spark plan. If any Firebase page ever asks you to "Upgrade", "Identity Platform" or add a billing account for this, stop and do not continue: Google sign-in does not need it.
+
+### One important change: Firebase sign-up goes back ON
+Google can create a new user only while **Enable create (sign-up)** is ticked in Firebase. (3.2.0 told you to untick it.) With it ticked again, anyone with your public API key could make a password account, so 3.3.0 adds a rule to the database: **only accounts with a confirmed email can read or write anything.** Google accounts and accounts made through the OTP Worker are confirmed automatically. Bot-made accounts are not, so they get nothing. Old email accounts that never confirmed get a free Firebase confirmation link when they next sign in.
+
+### Files
+Replace in `www/`: login.html, sync.js, ui.js.
+Replace in the repo root: firestore.rules, package.json, capacitor.config.json, README.md, SETUP.md.
+Replace: `.github/workflows/build-apk.yml`.
+Add (new): `.npmrc`, `scripts/patch-google-signin.sh`, `.github/workflows/show-key-fingerprint.yml`.
+In the zip the two dot-names have no dot (`github/` and `npmrc`). After uploading, rename them in GitHub: open the file > pencil (edit) > in the path box add the dot (`github/workflows/build-apk.yml` becomes `.github/workflows/build-apk.yml`, `npmrc` becomes `.npmrc`) > Commit.
+`firebase-config.js`, the `worker/` folder and `signing/` are **not** changed. Do not overwrite them.
+
+### Part A: website (about 10 minutes)
+
+**A1. Turn on Google in Firebase**
+1. console.firebase.google.com > your project > Build > Authentication > **Sign-in method**.
+2. **Add new provider** > **Google** > switch **Enable** on.
+3. Set the **public-facing name** (for example "Campus Events") and pick your **support email**. Save.
+
+**A2. Allow your website address**
+1. Authentication > **Settings** > **Authorized domains** > **Add domain**.
+2. Add the address people open the site on, for example `cem.deva.indevs.in` (just the host, no `https://`). Add `yourusername.github.io` too if you use it. `localhost` is already there.
+
+**A3. Switch sign-up back on** (skip if you never switched it off)
+1. Authentication > **Settings** > **User actions** > tick **Enable create (sign-up)** > Save.
+
+**A4. Publish the new database rules**
+1. Firestore Database > **Rules** tab > select everything > paste the new `firestore.rules` > **Publish**.
+2. Do this together with A3. Do not leave sign-up on with the old rules.
+
+**A5. Upload and deploy**
+1. On GitHub upload the files listed above (keep the folder structure; "Add file > Upload files" works, and the `.github/workflows/` and `scripts/` folders must keep their paths). Commit.
+2. Actions > **Deploy web version** > Run workflow.
+
+**A6. Test on the website**
+1. Open the site in a private window > **Continue with Google** > pick an account. You land in the app.
+2. Firebase console > Authentication > Users: the Google user is listed with provider Google.
+3. Sign out from the account menu and sign in with email and password. It still works.
+
+### Part B: Android app (about 15 minutes)
+Do Part A1 first. Google creates the app's "web client" when you switch Google on, and the Android file in step B4 needs it.
+
+**B1. Get your key's SHA-1**
+1. GitHub > Actions > **Show signing key fingerprint (SHA-1)** > Run workflow.
+2. Open the finished run > the summary shows **SHA-1** (20 pairs like `AB:CD:...`). Copy it.
+3. If it says the key or `KEYSTORE_PASSPHRASE` is missing, finish the permanent-key setup from the APK section of README.md first.
+
+**B2. Register the Android app in Firebase**
+1. Firebase console > gear icon > **Project settings** > **General** > **Your apps** > **Add app** > Android icon.
+2. **Android package name:** `com.campus.events` (exactly). Nickname: anything. **Debug signing certificate SHA-1:** paste the SHA-1 from B1. Click **Register app**.
+3. The wizard then shows steps about downloading a file and adding the SDK. You can click **Next** through them. The build does that for you.
+4. If you registered the app earlier without the SHA-1: Project settings > Your apps > the Android app > **Add fingerprint** > paste it > Save.
+
+**B3. Download `google-services.json` (after B2)**
+1. Project settings > General > Your apps > the Android app > **google-services.json** (download).
+2. Open it in a text editor. It must contain both `"client_type": 1` (your Android app) and `"client_type": 3` (the web client). If either is missing, you downloaded too early: check A1 and B2, then download it again.
+
+**B4. Give the file to the build**
+1. GitHub repo > Settings > **Secrets and variables** > **Actions** > **New repository secret**.
+2. Name: `GOOGLE_SERVICES_JSON`. Value: paste the **whole** file contents. Save.
+   (The values in this file are not passwords, but a secret keeps the repo clean. The build checks the file and stops with a clear message if it is wrong.)
+
+**B5. Build and install**
+1. Actions > **Build APK** > Run workflow. Download the APK artifact.
+2. Install it over the old app. It updates in place because it is signed with the same permanent key.
+3. Open the app > **Continue with Google**. Choose your account.
+
+**B6. Optional: ask people to update**
+Firestore > `appconfig` > `version`: set `latest` to `3.3.0` and add `notes`.
+
+### Existing users
+- **Email accounts made through the code step (3.2.0) and Google accounts:** nothing to do.
+- **Email accounts made before 3.2.0** (never confirmed): on the next sign-in they see "Please confirm your email first" and get a link from Firebase. They open it and sign in again. Check spam.
+- **Someone with an email account who now taps Google with the same email:** Firebase normally ties it to the same account, so their events are still there. If instead they see "This email already has an account with a password", they sign in with the password.
+
+### Troubleshooting
+| What you see | Cause and fix |
+| --- | --- |
+| "This website address is not allowed for Google sign-in yet" | A2: the exact host is missing from Authorized domains. |
+| "Google sign-in is not switched on in Firebase yet" | A1: Google is not enabled in Sign-in method. |
+| "New accounts are switched off in Firebase..." | A3: **Enable create (sign-up)** is still unticked. |
+| Google window never opens on the website | The browser blocked pop-ups. The page then switches to a redirect by itself; allow pop-ups for the site if it keeps failing. |
+| Signed in with Google but the app shows no data or permission errors | A4: the new rules were not published, or the old ones are still active. |
+| In the APK: "Google sign-in is missing from this app build" | You installed an older APK. Build and install 3.3.0 (B5). |
+| In the APK: Google shows an error with code 10 or "DEVELOPER_ERROR" | The SHA-1 in Firebase does not match the APK, or the package name is not exactly `com.campus.events`. Redo B1 and B2, download `google-services.json` again, update the secret, rebuild. |
+| In the APK: nothing happens or a generic failure | `GOOGLE_SERVICES_JSON` secret missing (the Build APK log shows a yellow warning on "Add Google sign-in"), or the phone has no Google Play services. |
+| Build APK stops at "Add Google sign-in" with an error | The message says which part of `google-services.json` is missing (no web client, no Android client, wrong package). Fix it and download the file again. |
+| Account menu shows the wrong name | Google supplies the name from the Google profile. Change it in the app: account menu > Account > Your name. |
+
+### How it works
+- **Website.** `login.html` opens Google's pop-up through Firebase's web SDK. A blocked pop-up falls back to a full-page redirect.
+- **Android app.** The plugin `@capacitor-firebase/authentication` shows Google's native account chooser and returns a Google ID token. With `skipNativeAuth` on, the plugin does not sign in natively; the page signs in to Firebase with that token using the same web SDK as before, so Firestore, chat and offline caching are unchanged.
+- **The database rule.** `firestore.rules` calls `signedIn()` everywhere it used to check for a login. `signedIn()` also requires `email_verified`. This is what replaces "sign-up switched off".
+- **Build.** `scripts/patch-google-signin.sh` enables the plugin's Google libraries and writes `google-services.json` from the secret. Without the secret the APK still builds, but the Google button in the APK fails.
+- **Sign-out** goes through one function (`cemSignOut` in sync.js), which also signs out of the native Google account.
+
+### Free-plan budget
+- **Firebase Authentication with Google:** no per-user or per-sign-in charge on the Spark plan.
+- **Firestore:** unchanged. Sign-in itself uses no reads or writes.
+- **GitHub Actions, GitHub Pages, Cloudflare Worker, Brevo:** unchanged.
+- **Junk accounts:** with sign-up on, bots can still add empty entries to the Authentication > Users list. They cannot use the database. You can delete them in the console.

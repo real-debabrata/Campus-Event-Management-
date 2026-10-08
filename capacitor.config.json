@@ -1,5 +1,13 @@
 {
   "appId": "com.campus.events",
   "appName": "Campus Events",
-  "webDir": "www"
+  "webDir": "www",
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": [
+        "google.com"
+      ]
+    }
+  }
 }

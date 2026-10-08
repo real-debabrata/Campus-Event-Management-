@@ -1,0 +1,2 @@
+# The Google sign-in plugin lists the "firebase" npm package as an optional peer. The app uses its own bundled copy in www/vendor, so skip it.
+legacy-peer-deps=true
