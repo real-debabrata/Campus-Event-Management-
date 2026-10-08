@@ -222,6 +222,11 @@ function panel(){
 }
 let AM='in';
 function authUI(){location.replace('login.html')}
+// 3.3.0: one sign-out for everything. In the Android app it also forgets the Google account so the next sign-in shows the account chooser.
+window.cemSignOut=async()=>{
+ try{const K=window.Capacitor,P=K&&K.isNativePlatform&&K.isNativePlatform()&&K.Plugins&&K.Plugins.FirebaseAuthentication;if(P)await P.signOut()}catch(e){}
+ return firebase.auth().signOut();
+};
 document.addEventListener('click',async e=>{
  const t=e.target.closest('button');if(!t)return;
  const g=id=>document.getElementById(id);
@@ -230,7 +235,7 @@ document.addEventListener('click',async e=>{
  else if(t.dataset.copy){try{await navigator.clipboard.writeText(t.dataset.copy);toast('Code copied')}catch(x){toast('Code: '+t.dataset.copy)}}
  else if(t.id==='jb')join(g('jc').value);
  else if(t.id==='clr'){N=[];localStorage.setItem('campus-notes','[]');badge();panel()}
- else if(t.id==='so'){tp.classList.add('hid');firebase.auth().signOut()}
+ else if(t.id==='so'){tp.classList.add('hid');window.cemSignOut()}
  else if(t.id==='tpx')tp.classList.add('hid');
  else if(t.id==='nmb')rename(g('nmi').value);
  else if(t.id==='off')g('au').remove();
@@ -254,6 +259,8 @@ if(ready){
  firebase.initializeApp(C);db=firebase.firestore();
  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
  firebase.auth().onAuthStateChanged(u=>{
+  // 3.3.0: the database accepts only confirmed emails. A leftover unconfirmed session goes back to the sign-in page, which sends a confirmation link.
+  if(u&&!u.emailVerified){firebase.auth().signOut();return}
   U=u;window.MYUID=u?u.uid:'';window.MYNAME=u?(u.displayName||u.email.split('@')[0]):'';
   if(u){document.documentElement.classList.remove('gate');askPerm();listen();render()}
   else{if(unsub)unsub();window.chatDrop&&chatDrop();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}

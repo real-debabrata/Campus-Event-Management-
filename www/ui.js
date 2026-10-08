@@ -1,6 +1,6 @@
 /* Campus Events: menu bar, UI polish, app version control. Loads after sync.js/app2.js; no core code is modified. */
 (function(){
-const APP_VERSION='3.2.0',BUILD='2026-10-06';   // bump these on every release
+const APP_VERSION='3.3.0',BUILD='2026-10-07';   // bump these on every release
 const $=s=>document.querySelector(s),LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
 const root=document.documentElement;
 let theme=localStorage.getItem('campus-theme')||'auto',CFG=LS('campus-ver',null);
@@ -119,7 +119,7 @@ document.addEventListener('click',e=>{
  else if(u==='join'){js.innerHTML='<div class="box"><button type="button" class="x" data-u="jx" aria-label="Close">✕</button><h3>Join a team</h3><p class="meta">Enter the 6-letter event code your organiser shared with you.</p><input id="jcode" maxlength="6" autocomplete="off" autocapitalize="characters" aria-label="Event code"><p id="jmsg" role="alert"></p><div class="row" style="margin-top:6px"><button class="btn" data-u="jgo">Join</button><button class="btn ghost" data-u="jx">Cancel</button></div></div>';js.classList.remove('hid');setTimeout(()=>{const i=$('#jcode');i&&i.focus()},50)}
  else if(u==='jgo')joinEvent($('#jcode').value);
  else if(u==='jx')js.classList.add('hid');
- else if(u==='out'&&window.firebase)firebase.auth().signOut();
+ else if(u==='out'&&window.firebase)(window.cemSignOut?window.cemSignOut():firebase.auth().signOut());
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){um.classList.add('hid');vs.classList.add('hid');js.classList.add('hid');const p=$('#tp');if(p)p.classList.add('hid')}if(e.key==='Enter'&&e.target.id==='jcode')joinEvent(e.target.value)});
 // tapping outside the account / alerts panel closes it (the path is read now, because the panel may redraw itself during the click)

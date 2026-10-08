@@ -33,6 +33,9 @@ input:focus-visible,button:focus-visible{outline:2px solid #4f6bff;outline-offse
 .otp{letter-spacing:.5em;text-align:center;font-size:22px;font-weight:700;padding-left:calc(12px + .5em)}
 #cf{margin-top:12px}#cf:empty{margin:0}
 .lnk.sm{display:block;margin-top:8px}.lnk:disabled{color:var(--mute);cursor:default}
+.gbtn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+.gbtn:hover{background:#f6f8fb}.gbtn:disabled{opacity:.6;cursor:default}
+.or{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:12px;margin:14px 0 0}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
 @media(max-width:760px){body{grid-template-columns:1fr}.hero{padding:28px 22px 4px}ul,.hero p{display:none}}
 </style></head><body>
 <div id="splash" role="status" aria-label="Loading Campus Events"><div class="sp-logo"><i class="sp-ring"></i><div class="sp-mark"><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lgs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b93ff"/><stop offset="1" stop-color="#ff7ab8"/></linearGradient></defs><rect width="40" height="40" fill="url(#lgs)"/><path d="M11 15h18v4a2 2 0 0 0 0 4v4H11v-4a2 2 0 0 0 0-4z" fill="#fff"/></svg></div></div><div class="sp-name">Campus Events</div><div class="sp-sub">Getting your events ready</div><div class="sp-bar"><i></i></div></div>
@@ -45,6 +48,7 @@ input:focus-visible,button:focus-visible{outline:2px solid #4f6bff;outline-offse
 <section class="pane"><div class="glass">
  <h2 id="ttl">Welcome back</h2><p class="meta" id="sub">Sign in to your workspace.</p>
  <div class="seg"><button id="t-in" class="on">Sign in</button><button id="t-up">Create account</button></div>
+ <div id="gw"><button type="button" class="gbtn" id="gg"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>Continue with Google</span></button><div class="or"><span>or use email</span></div></div>
  <div id="frm">
  <div id="nmw" class="hide"><label for="nm">Your name</label><input id="nm" autocomplete="name"></div>
  <label for="em">Email</label><input id="em" type="email" autocomplete="email" inputmode="email">
@@ -57,7 +61,7 @@ input:focus-visible,button:focus-visible{outline:2px solid #4f6bff;outline-offse
  <p id="msg" role="alert"></p>
  <button class="go" id="go">Sign in</button>
  <button class="lnk" id="fp">Forgot password?</button>
- <p class="meta" style="margin-top:14px">The first sign-in needs internet. After that, the app keeps working offline. New accounts are confirmed with a code sent to your email; signing in never asks for one.</p>
+ <p class="meta" style="margin-top:14px">The first sign-in needs internet. After that, the app keeps working offline. New email accounts are confirmed with a code sent to your inbox; signing in never asks for one. Google accounts need no code.</p>
 </div></section>
 <script src="firebase-config.js"></script>
 <script src="vendor/firebase-app-compat.js"></script>
@@ -68,12 +72,12 @@ const API=String(window.OTP_API||'').replace(/\/+$/,''),TSK=window.TURNSTILE_SIT
 const otpReady=!!API&&!/YOUR_/.test(API);
 let mode='in',step='form',busy=false,tsTok='',tsId=null,tsLoading=false,cd=0,cdT=null;
 const msg=(t,ok)=>{$('msg').textContent=t;$('msg').className=ok?'ok':''};
-if(!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey)){msg('Sign-in is not set up yet. Add your Firebase config to firebase-config.js.');$('go').disabled=true}
+if(!window.firebase||!C.apiKey||/YOUR_/.test(C.apiKey)){msg('Sign-in is not set up yet. Add your Firebase config to firebase-config.js.');$('go').disabled=true;$('gg').disabled=true}
 else{
  firebase.initializeApp(C);const auth=firebase.auth();
  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
- auth.onAuthStateChanged(u=>{if(u&&!busy)location.replace('index.html')});
- const friendly=e=>({'auth/invalid-credential':'Incorrect email or password.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account found for this email.','auth/email-already-in-use':'An account with this email already exists. Try signing in.','auth/weak-password':'Use a password with at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/network-request-failed':'No connection. Signing in needs internet the first time.','auth/too-many-requests':'Too many attempts. Wait a moment and try again.'}[e.code]||e.message||'Something went wrong. Please try again.');
+ auth.onAuthStateChanged(u=>{if(u&&!busy&&u.emailVerified)location.replace('index.html')});
+ const friendly=e=>({'auth/invalid-credential':'Incorrect email or password. If you joined with Google, use the Continue with Google button.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account found for this email.','auth/email-already-in-use':'An account with this email already exists. Try signing in.','auth/weak-password':'Use a password with at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/network-request-failed':'No connection. Signing in needs internet the first time.','auth/too-many-requests':'Too many attempts. Wait a moment and try again.','auth/popup-blocked':'Your browser blocked the Google window. Allow pop-ups for this site and try again.','auth/account-exists-with-different-credential':'This email already has an account with a password. Sign in with your email and password instead.','auth/unauthorized-domain':'This website address is not allowed for Google sign-in yet. Add it in Firebase > Authentication > Settings > Authorized domains.','auth/operation-not-allowed':'Google sign-in is not switched on in Firebase yet (Authentication > Sign-in method > Google).','auth/admin-restricted-operation':'New accounts are switched off in Firebase. Turn on "Enable create (sign-up)" (SETUP.md, Upgrade to 3.3.0).'}[e.code]||e.message||'Something went wrong. Please try again.');
  // Calls the sign-up OTP service (worker/otp-worker.js). It answers {ok:true} or {ok:false,message}.
  const post=async(path,body)=>{
   let r,j={};
@@ -95,7 +99,7 @@ else{
  };
  const resetTs=()=>{tsTok='';if(TSK&&tsId!==null&&window.turnstile)try{window.turnstile.reset(tsId)}catch(e){}};
  const showStep=s=>{step=s;const o=s==='otp',up=mode==='up';
-  $('frm').className=o?'hide':'';$('otpw').className=o?'':'hide';$('cf').className=up?'':'hide';
+  $('frm').className=o?'hide':'';$('gw').className=o?'hide':'';$('otpw').className=o?'':'hide';$('cf').className=up?'':'hide';
   $('go').textContent=!up?'Sign in':o?'Verify and create account':'Send verification code';
   $('fp').className=up?'lnk hide':'lnk';
   $('ttl').textContent=o?'Check your email':up?'Create your account':'Welcome back';
@@ -137,8 +141,16 @@ else{
   const {em,pw}=fields();
   if(!em||!pw)return msg('Enter your email and password.');
   busy=true;$('go').disabled=true;msg('');
-  try{await auth.signInWithEmailAndPassword(em,pw);location.replace('index.html')}
-  catch(e){busy=false;$('go').disabled=false;msg(friendly(e))}
+  try{
+   const c=await auth.signInWithEmailAndPassword(em,pw);
+   // Since 3.3.0 the database accepts only confirmed emails. Accounts made before the code step existed are asked to confirm once.
+   if(!c.user.emailVerified){
+    try{await c.user.sendEmailVerification()}catch(e){}
+    await auth.signOut();busy=false;$('go').disabled=false;
+    return msg('Please confirm your email first. We sent a link to '+em+'. Open it, then sign in again. Check spam if you do not see it.');
+   }
+   location.replace('index.html');
+  }catch(e){busy=false;$('go').disabled=false;msg(friendly(e))}
  };
  $('go').onclick=()=>mode==='in'?signIn():step==='form'?sendCode(false):verifyCode();
  $('rs').onclick=()=>sendCode(true);
@@ -148,7 +160,38 @@ else{
   const em=$('em').value.trim();if(!em)return msg('Type your email above first.');
   try{await auth.sendPasswordResetEmail(em);msg('Password reset link sent to '+em+'.',true)}catch(e){msg(friendly(e))}
  };
- document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('go').disabled)$('go').click()});
+
+ // ---- Google sign-in (3.3.0) ----
+ // Website: Google pop-up (falls back to a full-page redirect if the browser blocks pop-ups).
+ // Android app: a pop-up cannot work inside the app, so the native plugin asks Google for a token and the web SDK signs in with it.
+ const isNative=()=>{const K=window.Capacitor;return !!(K&&K.isNativePlatform&&K.isNativePlatform())};
+ const nativeGoogle=()=>{const K=window.Capacitor;return (K&&K.Plugins&&K.Plugins.FirebaseAuthentication)||null};
+ const cancelled=e=>/auth\/(popup-closed-by-user|cancelled-popup-request|user-cancelled)/.test((e&&e.code)||'')||/cancel|12501|dismiss/i.test(String((e&&e.message)||''));
+ const googleSignIn=async()=>{
+  busy=true;$('gg').disabled=true;$('go').disabled=true;msg('');
+  try{
+   if(isNative()){
+    const P=nativeGoogle();
+    if(!P)throw{message:'Google sign-in is missing from this app build. Install the latest APK.'};
+    const r=await P.signInWithGoogle({skipNativeAuth:true});
+    const tok=r&&r.credential&&r.credential.idToken;
+    if(!tok)throw{message:'Google did not return a sign-in token. Try again.'};
+    await auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(tok));
+   }else{
+    const gp=new firebase.auth.GoogleAuthProvider();gp.setCustomParameters({prompt:'select_account'});
+    try{await auth.signInWithPopup(gp)}
+    catch(e){
+     if(e&&(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment')){await auth.signInWithRedirect(gp);return}
+     throw e;
+    }
+   }
+   location.replace('index.html');
+  }catch(e){busy=false;$('gg').disabled=false;$('go').disabled=false;if(!cancelled(e))msg(friendly(e))}
+ };
+ $('gg').onclick=googleSignIn;
+ // Comes back here after a redirect sign-in; success is picked up by onAuthStateChanged above.
+ auth.getRedirectResult().catch(e=>{if(!cancelled(e))msg(friendly(e))});
+ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('go').disabled&&e.target.id!=='gg')$('go').click()});
 }
 </script>
 <script src="splash.js"></script></body></html>
