@@ -39,6 +39,12 @@ jobs:
       - run: npx cap add android
       - run: npx cap sync android
 
+      # v3.3.0: Google sign-in inside the APK. Needs the GOOGLE_SERVICES_JSON secret (SETUP.md > Upgrade to 3.3.0).
+      - name: Add Google sign-in (Android)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: bash scripts/patch-google-signin.sh
+
       - name: Set version and signing in build.gradle
         run: bash scripts/patch-android.sh
 
