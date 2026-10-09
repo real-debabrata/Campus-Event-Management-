@@ -3,6 +3,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="splash.css">
+<link rel="stylesheet" href="event.css">
 <title>Campus Events</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
@@ -67,7 +68,7 @@ let S={events:[],regs:[]};
 try{const r=localStorage.getItem('campus-events-v1');if(r)S=JSON.parse(r)}catch(e){}
 const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.forms=e.forms||[];e.payments=e.payments||[];e.bud=e.bud||[];e.ven=e.ven||[];e.exp=e.exp||[];e.itm=e.itm||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
 S.events.forEach(ensure);
-let V={dt:'regs',qr:0,tab:'dash',eid:null,filter:'All',q:'',draft:null};
+let V={dt:'info',qr:0,tab:'dash',eid:null,filter:'All',q:'',draft:null};
 const save=()=>{try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(e){}window.onSave&&window.onSave()};
 const toast=m=>{const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),1800)};
 const ev=id=>S.events.find(e=>e.id===id);
@@ -115,16 +116,7 @@ function fieldInput(f){
 }
 function detail(){
  const e=ev(V.eid);if(!e)return list();
- if(V.dt!=='regs')return head(e)+subtabs(e)+section(e);
- const rs=regsOf(e.id),full=rs.length>=e.cap;
- const cols=e.fields.slice(0,3);
- return `${head(e)}${subtabs(e)}
- <div class="card"><h3>Register an attendee</h3>
- ${full?'<p class="meta">This event is full.</p>':`<form id="reg" data-eid="${e.id}">${e.fields.map(fieldInput).join('')}<div style="margin-top:12px"><button class="btn" type="submit">Register</button></div></form>`}</div>
- <div class="card"><div class="row" style="justify-content:space-between"><h3>Attendees (${rs.length}/${e.cap})</h3><span class="meta">${rs.filter(r=>r.in).length} checked in</span></div>
- ${rs.length?`<div class="tbl"><table><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th>Status</th><th></th></tr>
- ${rs.map(r=>`<tr>${cols.map(c=>`<td>${esc(r.data[c.id]??(c===cols[0]?r.name:''))}</td>`).join('')}<td>${r.in?'<span class="in">Checked in</span>':'Registered'}${e.pay.fee?(r.paid?' · Paid':' · Unpaid'):''}</td>
- <td>${can(e,'regs')?`<button class="btn ghost sm" data-ci="${r.id}">${r.in?'Undo':'Check in'}</button>`:''} ${e.pay.fee?`<button class="btn ghost sm" data-paid="${r.id}">${r.paid?'Mark unpaid':'Mark paid'}</button> `:''}${can(e,'event')?`<button class="btn ghost sm del" data-rm="${r.id}">Remove</button>`:''}</td></tr>`).join('')}</table></div>`:'<div class="empty">No registrations yet. Use the form above to add the first attendee.</div>'}</div>`;
+ return window.eventPage?eventPage(e):'<div class="empty">The event page did not load. Reload the app.</div>';
 }
 function form(){
  const x=V.draft;
@@ -146,7 +138,7 @@ function form(){
  <button type="button" class="btn ghost sm del" data-fx="${i}">Remove</button>
  ${f.type==='select'?`<input style="grid-column:1/-1" data-fl="opts" data-i="${i}" placeholder="Options, separated by commas" value="${esc(f.opts)}">`:''}</div>`).join('')}
  <button type="button" class="btn ghost sm" data-fadd="1">Add question</button>
- <div class="row" style="margin-top:20px"><button class="btn" type="submit">${x.id?'Save changes':'Publish event'}</button><button type="button" class="btn ghost" data-go="events">Cancel</button></div></form>`;
+ <div class="row" style="margin-top:20px"><button class="btn" type="submit">${x.id?'Save changes':'Publish event'}</button>${x.id?`<button type="button" class="btn ghost" data-open="${x.id}">Cancel</button>`:'<button type="button" class="btn ghost" data-go="events">Cancel</button>'}</div></form>`;
 }
 function syncDraft(){
  const f=document.getElementById('evf');if(!f)return;
@@ -155,10 +147,10 @@ function syncDraft(){
 document.addEventListener('click',e=>{
  const t=e.target.closest('button');if(!t)return;const D=t.dataset;
  if(D.go){if(D.go==='new')V.draft=newDraft();go(D.go)}
- else if(D.open){V.dt='regs';go('detail',D.open)}
+ else if(D.open){window.resetEv&&resetEv();V.dt='info';go('detail',D.open)}
  else if(D.f){V.filter=D.f;render()}
  else if(D.ci){const r=S.regs.find(r=>r.id===D.ci);r.in=!r.in;save();render();toast(r.in?'Checked in':'Check-in undone')}
- else if(D.rm){S.regs=S.regs.filter(r=>r.id!==D.rm);save();render();toast('Registration removed')}
+ else if(D.rm){if(!confirm('Remove this registration?'))return;S.regs=S.regs.filter(r=>r.id!==D.rm);save();render();toast('Registration removed')}
  else if(D.del){const E0=ev(D.del),own=!E0||!E0.cloud||myRole(E0)==='owner';if(confirm(!own?'Leave this event?':E0&&E0.cloud?'Delete this event for everyone? Its chat, payment links and expenses are deleted with it.':'Delete this event and all its registrations?')){S.events=S.events.filter(x=>x.id!==D.del);S.regs=S.regs.filter(r=>r.eid!==D.del);save();go('events');toast('Event deleted')}}
  else if(D.edit){V.draft=JSON.parse(JSON.stringify(ev(D.edit)));go('new')}
  else if(D.preset){syncDraft();V.draft.fields=mk(V.draft.type);render()}
@@ -183,85 +175,10 @@ document.addEventListener('submit',e=>{
  else if(f.id==='evf'){
   syncDraft();const x=V.draft;
   if(x.id){S.events[S.events.findIndex(y=>y.id===x.id)]=x}else{x.id=uid();S.events.push(x)}
-  save();const id=x.id;V.draft=null;go('detail',id);toast('Published')}
+  save();const id=x.id;V.draft=null;window.resetEv&&resetEv();V.dt='info';go('detail',id);toast('Published')}
 });
 const cur=()=>ev(V.eid),sv=()=>{save();render()};
-const head=e=>`<button class="btn ghost sm" data-go="events">Back to events</button>
- <div class="card hc" style="margin-top:12px;border-left:6px solid ${TYPES[e.type]}">
- <span class="tag" style="color:${TYPES[e.type]}">${e.type}</span><h2>${esc(e.name)}</h2>
- <p class="meta">${fmt(e)} at ${esc(e.venue)}</p><p>${esc(e.desc)}</p>
- ${window.shareBar?shareBar(e):''}<p class="meta">Your role: ${LBL[myRole(e)]}</p>${can(e,'event')?`<div class="row"><button class="btn ghost sm" data-edit="${e.id}">Edit event</button><button class="btn ghost sm del" data-del="${e.id}">${myRole(e)==='owner'?'Delete event':'Leave event'}</button></div>`:(e.cloud?`<div class="row"><button class="btn ghost sm del" data-del="${e.id}">Leave event</button></div>`:'')}</div>`;
-const subtabs=e=>`<div class="chips">${[['regs','Attendees'],['people','People'],['tasks','Tasks'],['pay','Payments'],['exp','Expenses'],['chat','Chat']].map(t=>`<button class="chip ${V.dt===t[0]?'on':''}" data-dt="${t[0]}">${t[1]}${t[0]==='chat'&&e&&window.chatDot?chatDot(e):''}</button>`).join('')}</div>`;
-const section=e=>({people:peopleV,tasks:tasksV2,pay:payV2,exp:window.expV||(()=>''),chat:window.chatV||(()=>'')})[V.dt==='team'||V.dt==='teams'?'people':V.dt](e);
-const nm=(e,id)=>(e.team.find(m=>m.id===id)||{}).n||'Unassigned';
-function teamV(e){
- return `<div class="card"><h3>Add core team member</h3><form id="tmf" class="two">
- <div><label>Name *</label><input name="n" required></div><div><label>Role</label><input name="r" list="roles" placeholder="Convenor, Treasurer"></div>
- <div><label>Phone</label><input name="p"></div><div style="align-self:end"><button class="btn" type="submit">Add member</button></div></form>
- <datalist id="roles">${['Convenor','Co-convenor','Treasurer','Coordinator','Volunteer','Design lead','Marketing lead','Logistics lead'].map(r=>`<option>${r}</option>`).join('')}</datalist></div>
- <div class="card"><h3>Core team (${e.team.length})</h3>${e.team.length?`<div class="tbl"><table><tr><th>Name</th><th>Role</th><th>Phone</th><th>Tasks done</th><th></th></tr>
- ${e.team.map(m=>{const t=e.tasks.filter(k=>k.who===m.id);return `<tr><td>${esc(m.n)}</td><td>${esc(m.r)}</td><td>${esc(m.p)}</td><td>${t.filter(k=>k.done).length}/${t.length}</td><td><button class="btn ghost sm del" data-tmdel="${m.id}">Remove</button></td></tr>`}).join('')}</table></div>`:'<div class="empty">No team yet. Add your convenor and leads above.</div>'}</div>`;
-}
-function tasksV(e){
- const dn=e.tasks.filter(k=>k.done).length,p=e.tasks.length?Math.round(dn/e.tasks.length*100):0;
- return `<div class="card"><div class="row" style="justify-content:space-between"><h3>Task groups</h3><span class="meta">${dn} of ${e.tasks.length} tasks done</span></div>
- <div class="bar" style="margin:8px 0 12px"><i style="width:${p}%;background:var(--ok)"></i></div>
- <form id="grf" class="row"><input name="n" required placeholder="Group name, e.g. Logistics" style="flex:1;min-width:160px"><button class="btn" type="submit">Add group</button><button type="button" class="btn ghost" data-grstd="1">Add standard groups</button></form></div>
- ${e.groups.length?e.groups.map(g=>{const ts=e.tasks.filter(k=>k.gid===g.id);return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(g.n)}</h3><span class="meta">${ts.filter(k=>k.done).length}/${ts.length} done <button class="btn ghost sm del" data-grdel="${g.id}">Delete group</button></span></div>
- ${ts.map(k=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-tk="${k.id}" ${k.done?'checked':''} aria-label="Mark done"><span style="flex:1;${k.done?'text-decoration:line-through;color:var(--mute)':''}">${esc(k.t)}</span><span class="meta">${esc(nm(e,k.who))}${k.due?', due '+k.due:''}</span><button class="btn ghost sm del" data-tkdel="${k.id}">Delete</button></div>`).join('')}
- <form class="row tkf" data-gid="${g.id}" style="margin-top:10px"><input name="t" required placeholder="New task" style="flex:2;min-width:140px"><select name="w" style="flex:1;min-width:120px"><option value="">Assign to</option>${e.team.map(m=>`<option value="${m.id}">${esc(m.n)}</option>`).join('')}</select><input name="d" type="date" style="flex:1;min-width:130px"><button class="btn sm" type="submit">Add task</button></form></div>`}).join(''):'<div class="empty">No task groups yet. Add one above, or load the standard groups.</div>'}`;
-}
-const upiLink=(e,am)=>`upi://pay?pa=${encodeURIComponent(e.pay.upi)}&pn=${encodeURIComponent(e.pay.payee||e.name)}${am?'&am='+am:''}&cu=INR&tn=${encodeURIComponent(e.name)}`;
 const qrSvg=s=>{try{const q=qrcode(0,'M');q.addData(s);q.make();return `<div class="qr">${q.createSvgTag(5,4)}</div>`}catch(x){return '<p class="meta">The QR library did not load. Share the UPI ID instead.</p>'}};
-function payV(e){
- const p=e.pay,rs=regsOf(e.id),np=rs.filter(r=>r.paid).length,fee=np*p.fee,pend=(rs.length-np)*p.fee,don=e.don.reduce((s,x)=>s+x.a,0);
- const ok=/^[\w.\-]+@[\w]+$/.test(p.upi);
- return `<div class="stats"><div class="stat"><b>₹${fee}</b><span>Fees collected</span></div><div class="stat"><b>₹${pend}</b><span>Fees pending</span></div><div class="stat"><b>₹${don}</b><span>Donations</span></div><div class="stat"><b>₹${fee+don}</b><span>Total raised</span></div></div>
- <div class="card"><h3>Payment settings</h3><div class="two"><div><label>UPI ID</label><input data-pay="upi" value="${esc(p.upi)}" placeholder="club@okhdfcbank"></div>
- <div><label>Payee name</label><input data-pay="payee" value="${esc(p.payee)}"></div><div><label>Registration fee in ₹ (0 for free)</label><input data-pay="fee" type="number" min="0" value="${p.fee}"></div></div></div>
- ${ok?`<div class="grid">${p.fee?`<div class="card"><h3>Registration fee QR</h3><p class="meta">Fixed amount: ₹${p.fee}. Mark attendees as paid in the Attendees tab.</p>${qrSvg(upiLink(e,p.fee))}</div>`:''}
- <div class="card"><h3>Donation QR</h3><form id="qrf" class="row" style="margin-bottom:8px"><input name="a" type="number" min="0" placeholder="Amount in ₹ (blank lets donor choose)" value="${V.qr||''}" style="flex:1"><button class="btn sm" type="submit">Generate</button></form>${qrSvg(upiLink(e,V.qr))}</div></div>`:'<div class="card empty">Enter a valid UPI ID above to generate payment QR codes.</div>'}
- <div class="card"><h3>Record a donation</h3><form id="dnf" class="row"><input name="n" placeholder="Donor name" style="flex:2;min-width:140px"><input name="a" type="number" min="1" required placeholder="₹" style="flex:1;min-width:90px"><select name="m" style="flex:1;min-width:90px"><option>UPI</option><option>Cash</option></select><button class="btn" type="submit">Add</button></form>
- ${e.don.length?`<div class="tbl"><table><tr><th>Donor</th><th>Amount</th><th>Mode</th><th></th></tr>${e.don.map(x=>`<tr><td>${esc(x.n)}</td><td>₹${x.a}</td><td>${x.m}</td><td><button class="btn ghost sm del" data-dondel="${x.id}">Delete</button></td></tr>`).join('')}</table></div>`:''}</div>`;
-}
-function teamsV(e){
- const rs=regsOf(e.id),free=rs.filter(r=>!e.teams.some(t=>t.id===r.team));
- return `<div class="card"><h3>Build participant teams</h3><p class="meta">Create teams for contests or group activities, then add registered attendees. ${free.length} not in a team.</p>
- <form id="tnf" class="row"><input name="n" required placeholder="Team name" style="flex:1;min-width:160px"><button class="btn" type="submit">Create team</button></form>
- <form id="atf" class="row" style="margin-top:10px"><label style="margin:0">Auto-build teams of</label><input name="s" type="number" min="2" value="4" style="width:80px"><button class="btn ghost" type="submit">Split unassigned attendees</button></form></div>
- ${e.teams.length?`<div class="grid">${e.teams.map(t=>{const ms=rs.filter(r=>r.team===t.id);return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(t.n)}</h3><button class="btn ghost sm del" data-tdel="${t.id}">Delete</button></div>
- ${ms.map(r=>`<div class="row" style="justify-content:space-between;padding:4px 0">${esc(r.name)}<button class="btn ghost sm" data-tmrm="${r.id}">Remove</button></div>`).join('')||'<p class="meta">No members yet.</p>'}
- <select data-tmadd="${t.id}" style="margin-top:8px"><option value="">Add attendee</option>${free.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')}</select></div>`}).join('')}</div>`:'<div class="empty">No teams yet. Create one above or auto-build them.</div>'}`;
-}
-document.addEventListener('click',e=>{
- const t=e.target.closest('button');if(!t)return;const D=t.dataset,E=cur();
- if(D.dt){V.dt=D.dt;render()}
- else if(D.paid){const r=S.regs.find(r=>r.id===D.paid);r.paid=!r.paid;sv()}
- else if(D.tmdel){E.team=E.team.filter(m=>m.id!==D.tmdel);E.tasks.forEach(k=>{if(k.who===D.tmdel)k.who=''});sv()}
- else if(D.grdel){E.groups=E.groups.filter(g=>g.id!==D.grdel);E.tasks=E.tasks.filter(k=>k.gid!==D.grdel);sv()}
- else if(D.grstd){['Logistics','Marketing','Finance','Hospitality','Tech and AV'].forEach(n=>{if(!E.groups.some(g=>g.n===n))E.groups.push({id:uid(),n})});sv()}
- else if(D.tkdel){E.tasks=E.tasks.filter(k=>k.id!==D.tkdel);sv()}
- else if(D.dondel){E.don=E.don.filter(x=>x.id!==D.dondel);sv()}
- else if(D.tdel){E.teams=E.teams.filter(x=>x.id!==D.tdel);S.regs.forEach(r=>{if(r.team===D.tdel)r.team=''});sv()}
- else if(D.tmrm){S.regs.find(r=>r.id===D.tmrm).team='';sv()}
-});
-document.addEventListener('change',e=>{
- const t=e.target,E=cur();
- if(t.dataset.tk){E.tasks.find(k=>k.id===t.dataset.tk).done=t.checked;sv()}
- else if(t.dataset.pay){const k=t.dataset.pay;E.pay[k]=k==='fee'?Math.max(0,+t.value||0):t.value.trim();sv()}
- else if(t.dataset.tmadd&&t.value){S.regs.find(r=>r.id===t.value).team=t.dataset.tmadd;sv()}
-});
-document.addEventListener('submit',e=>{
- const f=e.target,E=cur(),fd=new FormData(f);
- if(f.id==='tmf'){E.team.push({id:uid(),n:fd.get('n').trim(),r:fd.get('r').trim()||'Member',p:fd.get('p').trim()});sv();toast('Member added')}
- else if(f.id==='grf'){E.groups.push({id:uid(),n:fd.get('n').trim()});sv()}
- else if(f.classList.contains('tkf')){E.tasks.push({id:uid(),gid:f.dataset.gid,t:fd.get('t').trim(),who:fd.get('w'),due:fd.get('d'),done:false});sv();toast('Task added')}
- else if(f.id==='tnf'){E.teams.push({id:uid(),n:fd.get('n').trim()});sv()}
- else if(f.id==='atf'){const n=Math.max(2,+fd.get('s')||4),pool=regsOf(E.id).filter(r=>!E.teams.some(t=>t.id===r.team)).sort(()=>Math.random()-.5);
-  for(let i=0;i<pool.length;i+=n){const t={id:uid(),n:'Team '+(E.teams.length+1)};E.teams.push(t);pool.slice(i,i+n).forEach(r=>r.team=t.id)}sv();toast('Teams built')}
- else if(f.id==='dnf'){E.don.push({id:uid(),n:fd.get('n').trim()||'Anonymous',a:+fd.get('a')||0,m:fd.get('m')});sv();toast('Donation recorded')}
- else if(f.id==='qrf'){V.qr=+fd.get('a')||0;render()}
-});
 render();
 </script>
 <script src="firebase-config.js"></script>
@@ -271,6 +188,7 @@ render();
 <script src="sync.js"></script>
 <script src="app2.js"></script>
 <script src="expenses.js"></script>
+<script src="event.js"></script>
 <script src="chat.js"></script>
 <script src="ui.js"></script>
 <script src="splash.js"></script>
