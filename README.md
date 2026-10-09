@@ -1,9 +1,38 @@
-# Campus Events (CEM) 3.3.0
+# Campus Events (CEM) 3.4.0
 
-Plan campus events with your team: registrations, tasks, roles, UPI payment links, a chat inside every event and now expenses.
+Plan campus events with your team: registrations, tasks, roles, UPI payment links, a chat inside every event, and a budget with bills and vendors.
 Runs as an Android app (APK built by GitHub, no installs) and as a website. Everything fits in the free plans of GitHub and Firebase (Spark).
 
-## What's new in 3.3.0
+## What's new in 3.4.0: a tidier event page
+A redesign of the event screen. **Your data, sign-in, rules and Cloudflare Worker are untouched**, so upgrading is just replacing a few files (**SETUP.md > Upgrade to 3.4.0**, about 5 minutes, nothing to migrate).
+
+**Where things are now**
+
+| Tab | What is in it |
+| --- | --- |
+| **Details** (new) | Date, time, venue, description, seats, a tappable summary (registered, checked in, open tasks, people, budget left), the event code to invite people, your role, Edit / Delete / Leave. The old header card that repeated on every tab is gone; every tab now starts with just the event name. |
+| **Attendees** | Search, filters (all / not checked in / checked in), one-tap **Check in**, and a **Register attendee** form that stays closed until you need it and is ready for the next person after each save. The **participant Team maker moved here** (switch between *Attendees* and *Teams* at the top). |
+| **Tasks** | Task groups **and Items to buy** in one place, with one progress bar and one filter row (All / Mine and my team / To do / Done) that applies to both. Add forms open from "+ Add task" / "+ Add item". Ticking an item asks what it really cost. |
+| **People** | Everyone on the event, sorted by role, with their role, task progress and phone. Add volunteers who have no account with "+ Add person". The role guide is one tap away. |
+| **Payments** | Money coming in. Payments waiting to be checked are first, with filters; payment links come next; link settings are tucked away. |
+| **Expenses** | Money going out: **Budget**, **Bills**, **Vendors** (see below). Only organizer, manager and treasurer see this tab. |
+| **Chat** | As before. |
+
+The tab bar scrolls sideways on a phone and shows small counters: attendees, open tasks, people, and in **red** payments waiting to be checked and overdue bills.
+
+**Expenses & Budget, redesigned**
+- **Summary card** at the top: how much you can still spend (or how far over you are), with one bar: solid = spent, hatched = still to pay.
+- **Budget view**: one card per category with a status ("On track", "Almost used", "Over by ₹1,500"). Tap a card to see every bill and item inside it and to change the planned amount. Adding a category is one tap on a suggestion (Venue, Food, Decor...) plus an amount.
+- **Bills view** (was "Payments to vendors"): what you owe, sorted with **overdue first** and labelled "Due in 3 days" or "Overdue by 2 days". **Pay via UPI** shows the QR code in place; **Mark paid** takes the mode and UTR. Paid bills are tucked behind "Show paid bills". The add form is short; to record something already paid, use **Add as already paid**.
+- **Vendors view**: contact, UPI ID, how much you have paid and still owe each one, and an **Add bill** shortcut.
+- Items to buy still count in the budget (bought = spent at the real cost, not yet bought = to pay at the estimate). The summary card links to them in Tasks.
+
+**Small things**
+- Deleting a task, a task group that has tasks, a team, a registration, a category, a vendor or a bill now asks first.
+- Viewers can no longer register attendees or edit teams (they could before; the roles table already said read-only). Check-in still needs team lead or above.
+- Cancelling "Edit event" returns to the event instead of the list. Opening an event lands on Details.
+
+## What was new in 3.3.0
 - **Sign in or sign up with Google**, on the website and inside the Android app. One tap, no password, no emailed code (Google has already confirmed the address). Email and password still work exactly as before.
   - **Website:** a Google pop-up (it switches to a full-page redirect if the browser blocks pop-ups).
   - **Android app:** a pop-up cannot work inside an app, so the app uses the free `@capacitor-firebase/authentication` plugin to get a Google token and signs in to Firebase with it. The rest of the app is unchanged.
@@ -101,15 +130,17 @@ An app installed from a build that used a random key (or a different key) can ne
 Notes: the app version people see (`APP_VERSION` in www/ui.js) and Android's `versionCode` are separate. Bump `APP_VERSION` for what users read; `versionCode` is set automatically on every build. If you build on your computer (Option B), make sure the same key is used, otherwise that APK cannot update one built by GitHub.
 
 ## Set up Firebase, chat and the website
-Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) **"Upgrade to 3.2.0" (email-code sign-up)** and **"Upgrade to 3.3.0" (Google sign-in)**).
+Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: **"Upgrade to 3.4.0" (new event page, files only)**, "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) **"Upgrade to 3.2.0" (email-code sign-up)** and **"Upgrade to 3.3.0" (Google sign-in)**).
 
 ## Files
 | Path | What it does |
 | --- | --- |
-| www/index.html | Main app: events, attendees, tabs |
+| www/index.html | Main app shell: dashboard, event list, event form, registration actions |
+| www/event.js | The event page: header, tab bar, Details, Attendees and the Team maker (new in 3.4.0) |
+| www/event.css | Styles for the event page: tabs, lists, status pills, budget cards (new in 3.4.0) |
 | www/sync.js | Firebase sign-in, live sync, alerts |
-| www/app2.js | Roles, tasks (with descriptions), people, payment links and their expiry |
-| www/expenses.js | Budget, vendors, vendor payments, items to buy (new in 3.1.0) |
+| www/app2.js | Roles and permissions, Tasks, People, Payments (money in) and payment-link expiry |
+| www/expenses.js | Expenses & Budget (budget, bills, vendors) and the Items to buy list shown in Tasks (3.1.0, redesigned in 3.4.0) |
 | www/chat.js | Event chat, @tagging, full-screen layout |
 | www/ui.js | Menu bar, themes, version control. `APP_VERSION` lives here |
 | www/splash.css, www/splash.js | Animated logo loader (new in 2.0.0) |

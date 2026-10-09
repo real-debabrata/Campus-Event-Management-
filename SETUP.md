@@ -351,3 +351,58 @@ Firestore > `appconfig` > `version`: set `latest` to `3.3.0` and add `notes`.
 - **Firestore:** unchanged. Sign-in itself uses no reads or writes.
 - **GitHub Actions, GitHub Pages, Cloudflare Worker, Brevo:** unchanged.
 - **Junk accounts:** with sign-up on, bots can still add empty entries to the Authentication > Users list. They cannot use the database. You can delete them in the console.
+
+## Upgrade to 3.4.0: the new event page (files only)
+
+3.4.0 reorganises the event screen (new Details tab, Teams inside Attendees, Items to buy inside Tasks, a redesigned Expenses & Budget). It is **a files-only upgrade**:
+- No change to Firebase, `firestore.rules`, the Cloudflare Worker, secrets or the signing key. Do not touch them.
+- No data migration. Events, attendees, tasks, items, budget lines, bills and vendors are stored in the same fields as before and show up in the new layout straight away.
+- Mixed versions are safe. People on 3.3.0 and 3.4.0 can use the same event at the same time.
+
+**A1. Replace and add files in `www/`**
+
+| Action | Files |
+| --- | --- |
+| Replace | `index.html`, `app2.js`, `expenses.js`, `ui.js` |
+| Add (new) | `event.js`, `event.css` |
+| Leave alone | `sync.js`, `chat.js`, `login.html`, `pay.html`, `firebase-config.js`, `splash.js`, `splash.css` |
+
+Also replace `README.md`, `SETUP.md` and `package.json` if you want the new docs and version number. If you edited `firebase-config.js`, `treasurer:'Cashier'` in `app2.js`, or anything else by hand, re-apply it to the new `app2.js`.
+
+Using the zip: unzip it over your repository folder (same paths), commit and push to `main`. Using GitHub in the browser: open the `www` folder > **Add file > Upload files**, drag in all files from the zip's `www` folder, then commit.
+
+**A2. Update the website**
+Pushing alone does **not** update the website. Go to **Actions > Deploy web version > Run workflow** and wait for the green tick (about a minute). Then open the site and refresh once (on a phone, pull down, or close and reopen the tab). Open the account menu > **About & updates**: it shows **v3.4.0** when it worked.
+
+**A3. Update the Android app (optional)**
+Pushing to `main` starts **Build APK** by itself (or run it from Actions). Download the APK artifact and install it over the old app. It updates in place because it uses the same permanent key. The version is read from `APP_VERSION` in `www/ui.js`, which is now `3.4.0`.
+
+**A4. Optional: ask people to update**
+Firestore > `appconfig` > `version`: set `latest` to `3.4.0` and add `notes` such as "New event page". Leave `min` alone, because 3.3.0 still works.
+
+### Quick check after upgrading (3 minutes)
+1. Open an event. You land on **Details**, and the other tabs show only the event name above them.
+2. **Attendees**: tap **Register attendee**, add someone, search for them, tap **Check in**. Switch to **Teams** at the top and create a team.
+3. **Tasks**: you see your task groups and, below them, **Items to buy**. Tick an item: it asks what it cost.
+4. **Expenses** (as organizer): the summary card shows spent, to pay and left. Add a category with a suggestion chip, open **Bills** and add a bill, open **Vendors**.
+5. Sign in as a plain member (second account): the **Expenses** tab is not shown, and Tasks still lists the items given to them.
+
+### What changed for each role
+| Role | Difference |
+| --- | --- |
+| Organizer, Manager | Same powers, new layout. Edit and delete moved to **Details**. |
+| Treasurer | Sees **Expenses** and **Payments**. |
+| Team lead | Adds and allocates items from the **Tasks** tab (they used to do it under Expenses). Still checks in attendees. |
+| Member | No longer sees the **Expenses** tab (it only showed them the items list, which now lives in **Tasks**; their own items are also in **My tasks**). |
+| Viewer | Read only. Can no longer register attendees or change teams. |
+
+### Rolling back
+Keep a copy of the old `www` files before you replace them. To go back, restore `index.html`, `app2.js`, `expenses.js`, `ui.js`, delete `event.js` and `event.css`, then run **Deploy web version** again. Because no data changed shape, nothing needs undoing.
+
+### Troubleshooting
+| What you see | Cause and fix |
+| --- | --- |
+| "The event page did not load. Reload the app." | `event.js` is missing from `www/`, or the browser kept an old copy. Check that `www/event.js` and `www/event.css` were uploaded, redeploy, and refresh. |
+| The page looks unstyled (no tab bar) | `event.css` is missing or was not uploaded. |
+| Old layout still shows | The website was not redeployed (A2), or the browser cache needs a refresh. |
+| A member asks where Expenses went | By design: only organizer, manager and treasurer have it. Items to buy are in **Tasks**. |
