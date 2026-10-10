@@ -61,12 +61,14 @@ const PRESETS={
  Cultural:[['Full name','text',1],['College ID','text',1],['Performing?','checkbox',0],['Act details','text',0]],
  Sports:[['Full name','text',1],['College ID','text',1],['Team name','text',0],['T-shirt size','select',1,'S,M,L,XL']]};
 const uid=()=>Math.random().toString(36).slice(2,9);
+// 3.5.0: attendee ids are the secret inside a QR ticket, so they come from the browser's secure random generator (12 characters).
+const rid=()=>{try{const a=new Uint8Array(12);crypto.getRandomValues(a);return Array.from(a,x=>'abcdefghijkmnpqrstuvwxyz23456789'[x%32]).join('')}catch(e){return uid()+uid()}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const mk=p=>PRESETS[p].map(f=>({id:uid(),label:f[0],type:f[1],req:!!f[2],opts:f[3]||''}));
 const d=n=>{const x=new Date();x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
 let S={events:[],regs:[]};
 try{const r=localStorage.getItem('campus-events-v1');if(r)S=JSON.parse(r)}catch(e){}
-const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.forms=e.forms||[];e.payments=e.payments||[];e.bud=e.bud||[];e.ven=e.ven||[];e.exp=e.exp||[];e.itm=e.itm||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
+const ensure=e=>{e.team=e.team||[];e.groups=e.groups||[];e.tasks=e.tasks||[];e.teams=e.teams||[];e.don=e.don||[];e.forms=e.forms||[];e.payments=e.payments||[];e.bud=e.bud||[];e.ven=e.ven||[];e.exp=e.exp||[];e.itm=e.itm||[];e.spn=e.spn||[];e.pay=e.pay||{upi:'',payee:'',fee:0};return e};
 S.events.forEach(ensure);
 let V={dt:'info',qr:0,tab:'dash',eid:null,filter:'All',q:'',draft:null};
 const save=()=>{try{localStorage.setItem('campus-events-v1',JSON.stringify(S))}catch(e){}window.onSave&&window.onSave()};
@@ -75,7 +77,7 @@ const ev=id=>S.events.find(e=>e.id===id);
 const regsOf=id=>S.regs.filter(r=>r.eid===id);
 const fmt=e=>new Date(e.date+'T'+(e.time||'00:00')).toLocaleString([], {weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
 const go=(t,eid=null)=>{V.tab=t;V.eid=eid;if(t==='new'&&!V.draft)V.draft=newDraft();render();scrollTo(0,0)};
-function newDraft(){return{id:null,name:'',type:'Seminar',date:d(7),time:'10:00',venue:'',cap:100,desc:'',fields:mk('Seminar'),team:[],groups:[],tasks:[],teams:[],don:[],forms:[],payments:[],bud:[],ven:[],exp:[],itm:[],pay:{upi:'',payee:'',fee:0}}}
+function newDraft(){return{id:null,name:'',type:'Seminar',date:d(7),time:'10:00',venue:'',cap:100,desc:'',fields:mk('Seminar'),team:[],groups:[],tasks:[],teams:[],don:[],forms:[],payments:[],bud:[],ven:[],exp:[],itm:[],spn:[],pay:{upi:'',payee:'',fee:0}}}
 
 function render(){
  const nav=[['dash','Dashboard'],['events','Events'],['mine','My tasks'+(window.mineCount?mineCount():'')],['new','New event']];
@@ -149,9 +151,11 @@ document.addEventListener('click',e=>{
  if(D.go){if(D.go==='new')V.draft=newDraft();go(D.go)}
  else if(D.open){window.resetEv&&resetEv();V.dt='info';go('detail',D.open)}
  else if(D.f){V.filter=D.f;render()}
- else if(D.ci){const r=S.regs.find(r=>r.id===D.ci);r.in=!r.in;save();render();toast(r.in?'Checked in':'Check-in undone')}
- else if(D.rm){if(!confirm('Remove this registration?'))return;S.regs=S.regs.filter(r=>r.id!==D.rm);save();render();toast('Registration removed')}
- else if(D.del){const E0=ev(D.del),own=!E0||!E0.cloud||myRole(E0)==='owner';if(confirm(!own?'Leave this event?':E0&&E0.cloud?'Delete this event for everyone? Its chat, payment links and expenses are deleted with it.':'Delete this event and all its registrations?')){S.events=S.events.filter(x=>x.id!==D.del);S.regs=S.regs.filter(r=>r.eid!==D.del);save();go('events');toast('Event deleted')}}
+ else if(D.ci){const r=S.regs.find(r=>r.id===D.ci),E0=r&&ev(r.eid);if(!r||(E0&&window.can&&!can(E0,'regs')))return;
+  if(r.in){r.in=false;delete r.inAt;delete r.inBy}else{r.in=true;r.inAt=Date.now();r.inBy=window.MYNAME||''}   // 3.5.0: who and when
+  save();render();toast(r.in?'Checked in':'Check-in undone')}
+ else if(D.rm){const E1=ev((S.regs.find(r=>r.id===D.rm)||{}).eid);if(E1&&window.can&&!can(E1,'event'))return;if(!confirm('Remove this registration?'))return;S.regs=S.regs.filter(r=>r.id!==D.rm);save();render();toast('Registration removed')}
+ else if(D.del){const E0=ev(D.del),own=!E0||!E0.cloud||myRole(E0)==='owner';if(confirm(!own?'Leave this event?':E0&&E0.cloud?'Delete this event for everyone? Its chat, payment links, expenses, sponsors and online registrations are deleted with it.':'Delete this event and all its registrations?')){S.events=S.events.filter(x=>x.id!==D.del);S.regs=S.regs.filter(r=>r.eid!==D.del);save();go('events');toast('Event deleted')}}
  else if(D.edit){V.draft=JSON.parse(JSON.stringify(ev(D.edit)));go('new')}
  else if(D.preset){syncDraft();V.draft.fields=mk(V.draft.type);render()}
  else if(D.fadd){syncDraft();V.draft.fields.push({id:uid(),label:'New question',type:'text',req:false,opts:''});render()}
@@ -169,8 +173,14 @@ document.addEventListener('submit',e=>{
  e.preventDefault();const f=e.target;
  if(f.id==='reg'){
   const ev1=ev(f.dataset.eid),fd=new FormData(f),data={};
+  if(!ev1||(window.can&&!can(ev1,'write')))return;
   ev1.fields.forEach(q=>{data[q.id]=q.type==='checkbox'?(fd.get('f_'+q.id)?'Yes':'No'):fd.get('f_'+q.id)||''});
-  S.regs.push({id:uid(),eid:ev1.id,data,name:data[ev1.fields[0].id]||'Guest',in:false,at:Date.now()});
+  const cid=window.cidOf?cidOf(ev1,data):'';
+  if(regsOf(ev1.id).length>=ev1.cap)return toast('All '+ev1.cap+' seats are taken');
+  if(cid&&regsOf(ev1.id).some(r=>window.regCid&&regCid(ev1,r)===cid))return toast('This College ID is already registered');   // 3.5.0: duplicate check
+  const r1={id:rid(),eid:ev1.id,data,name:data[ev1.fields[0].id]||'Guest',in:false,at:Date.now(),src:'manual'};
+  if(cid)r1.cid=cid;
+  S.regs.push(r1);
   save();render();toast('Registered')}
  else if(f.id==='evf'){
   syncDraft();const x=V.draft;
@@ -190,6 +200,9 @@ render();
 <script src="expenses.js"></script>
 <script src="event.js"></script>
 <script src="chat.js"></script>
+<script src="signup.js"></script>
+<script src="scan.js"></script>
+<script src="income.js"></script>
 <script src="ui.js"></script>
 <script src="splash.js"></script>
 </body></html>

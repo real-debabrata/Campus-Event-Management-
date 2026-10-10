@@ -1,4 +1,4 @@
-/* Campus Events 3.4.0: event page layout.
+/* Campus Events 3.5.0 (3.4.0 layout + income, break-even): event page layout.
    Tabs, list rows, status pills, forms and the Expenses & Budget cards.
    Uses the colour tokens defined in index.html (--bg --card --ink --mute --line --acc --ok --bad). */
 :root{--warn:#a4610a}
@@ -144,3 +144,15 @@ a{color:var(--acc)}
  .tkr .t2,.tkr .fp,.tdb{margin-left:0}
 }
 @media(prefers-reduced-motion:reduce){.xch .chev{transition:none}}
+
+/* ---------- 3.5.0: income, break-even, online registration ---------- */
+.be{position:relative;display:flex;height:22px;border-radius:8px;background:var(--line);margin-top:30px}
+.be i{display:block;height:100%}.be i:first-child{border-radius:8px 0 0 8px}
+.ba{background:var(--ok)}.bb{background:var(--acc)}
+.bc{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--ok) 65%,transparent) 0 5px,color-mix(in srgb,var(--ok) 22%,transparent) 5px 10px)}
+.bd{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--acc) 55%,transparent) 0 5px,color-mix(in srgb,var(--acc) 18%,transparent) 5px 10px)}
+.be .bm{position:absolute;top:-6px;bottom:-6px;width:3px;margin-left:-1px;background:var(--ink);border-radius:2px}
+.be .bm em{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-style:normal;font-size:12px;font-weight:700;white-space:nowrap;color:var(--ink)}
+.mlg .ba,.mlg .bb,.mlg .bc,.mlg .bd{display:inline-block}
+.card input[readonly]{font-size:13px}
+button[disabled]{opacity:.5;cursor:not-allowed}

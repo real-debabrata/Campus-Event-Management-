@@ -5,9 +5,15 @@ const LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){retu
 let P=Object.assign({tasks:1,people:1,money:1,event:1,chat:1,mention:1,ntfy:0},LS('campus-prefs',{}));
 let N=LS('campus-notes',[]);
 let U=null,db,unsub,applying=false;const sent={},owners={};
-const KEYS=['info','team','groups','tasks','teams','don','pay','regs','forms','payments','bud','ven','exp','itm'],MAPK=['forms','payments','bud','ven','exp','itm'];   // 3.1.0: bud=budget lines, ven=vendors, exp=vendor payments, itm=items to buy
+// 3.5.0: the event document keeps KEYS. The money data (FINK) lives in events/{id}/fin/data, which only owner, manager and treasurer can read or write.
+//   bud=budget lines, ven=vendors, exp=vendor bills, payments=earlier payments, don=donations, spn=sponsors and other income.
+// MAPK fields are stored one entry per field (forms.<id>, itm.<id>, regs.<id>) so two people never overwrite each other.
+const KEYS=['info','team','groups','tasks','teams','pay','regs','forms','itm'],FINK=['don','bud','ven','exp','payments','spn'],MAPK=['forms','itm','regs'],ALLK=KEYS.concat(FINK),LEGACY=['bud','ven','exp','payments','don'];
 const arr=o=>Array.isArray(o)?o:Object.values(o||{}).sort((a,b)=>(a.at||0)-(b.at||0));
-const toMap=a=>Object.fromEntries((a||[]).map(x=>[x.id,x]));
+const toMap=a=>Object.fromEntries((a||[]).map((x,i)=>[x.id||('i'+i),x]));
+const withIds=(a,p)=>arr(a).map((x,i)=>x&&x.id?x:Object.assign({id:p+i},x));
+const nest=o=>{const r={};Object.keys(o).forEach(k=>{const q=k.split('.');let c=r;q.slice(0,-1).forEach(z=>{c=c[z]=c[z]||{}});c[q[q.length-1]]=o[k]});return r};
+const legacyRegs={},finUn={},finLoaded={},migrated={};
 const clean=o=>JSON.parse(JSON.stringify(o));
 const me=()=>((U&&(U.displayName||U.email.split('@')[0]))||'').toLowerCase();
 const err=x=>toast(x.code==='permission-denied'?'No permission. Check the Firestore rules.':'Sync problem: '+(x.message||x.code));
@@ -43,10 +49,12 @@ function notify(list){
 function snapOf(e){
  const o={info:{name:e.name,type:e.type,date:e.date,time:e.time,venue:e.venue,cap:e.cap,desc:e.desc,fields:e.fields},
   team:e.team||[],groups:e.groups||[],tasks:e.tasks||[],teams:e.teams||[],don:e.don||[],pay:e.pay||{upi:'',payee:'',fee:0},
-  regs:S.regs.filter(r=>r.eid===e.id),forms:e.forms||[],payments:e.payments||[],bud:e.bud||[],ven:e.ven||[],exp:e.exp||[],itm:e.itm||[],members:e.members||{}};
+  regs:S.regs.filter(r=>r.eid===e.id).map(r=>{const c=Object.assign({},r);delete c.eid;return c}),   // 3.5.0: no eid inside the stored entry
+  forms:e.forms||[],payments:e.payments||[],bud:e.bud||[],ven:e.ven||[],exp:e.exp||[],itm:e.itm||[],spn:e.spn||[],members:e.members||{}};
  return clean(o);
 }
-const parts=e=>{const o=snapOf(e),r={};KEYS.forEach(k=>r[k]=JSON.stringify(o[k]));return r};
+const parts=e=>{const o=snapOf(e),r={};ALLK.forEach(k=>r[k]=JSON.stringify(o[k]));return r};
+const finParts=e=>{const o=snapOf(e),r={};FINK.forEach(k=>r[k]=JSON.stringify(o[k]));return r};
 function diff(o,n,who){
  const out=[],added=(a,b)=>b.filter(x=>!a.some(y=>y.id===x.id));
  const nm=id=>((n.team.find(m=>m.id===id)||{}).n||'').toLowerCase();
@@ -80,22 +88,71 @@ window.notify=notify;   // used by chat.js
 function apply(id,d){
  let e=S.events.find(x=>x.id===id);const old=e?snapOf(e):null;
  if(!e){e={id};S.events.push(e)}
- Object.assign(e,d.info||{},{team:d.team||[],groups:d.groups||[],tasks:d.tasks||[],teams:d.teams||[],don:d.don||[],
-  pay:d.pay||{upi:'',payee:'',fee:0},forms:arr(d.forms),payments:arr(d.payments),bud:arr(d.bud),ven:arr(d.ven),exp:arr(d.exp),itm:arr(d.itm),cloud:1,owner:d.owner,ntfy:d.ntfy||'',members:d.members||{}});
- S.regs=S.regs.filter(r=>r.eid!==id).concat((d.regs||[]).map(r=>Object.assign({},r,{eid:id})));
- owners[id]=d.owner;sent[id]=parts(e);return old;
+ Object.assign(e,d.info||{},{team:d.team||[],groups:d.groups||[],tasks:d.tasks||[],teams:d.teams||[],
+  pay:d.pay||{upi:'',payee:'',fee:0},forms:arr(d.forms),itm:arr(d.itm),cloud:1,owner:d.owner,ntfy:d.ntfy||'',members:d.members||{}});
+ // 3.5.0: money data comes from events/{id}/fin/data (see watchFin). Events not yet converted still carry it here; staff see it until the one-time conversion runs.
+ FINK.forEach(k=>{if(!Array.isArray(e[k]))e[k]=[]});
+ let lg=0;if(!finLoaded[id]&&window.can&&can(e,'exp'))FINK.forEach(k=>{if(d[k]!==undefined){e[k]=withIds(d[k],k[0]);lg=1}});
+ legacyRegs[id]=Array.isArray(d.regs);
+ S.regs=S.regs.filter(r=>r.eid!==id).concat(arr(d.regs).filter(r=>r&&r.name).map(r=>Object.assign({},r,{eid:id})));   // an entry without a name is a stray field write for an attendee that was deleted
+ const prev=sent[id];owners[id]=d.owner;sent[id]=parts(e);
+ if(prev&&!lg)FINK.forEach(k=>{sent[id][k]=prev[k]});   // money data is not in this snapshot: keep what was last confirmed so an unsent local edit is still sent
+ return old;
 }
+// ---------- money data (3.5.0): events/{id}/fin/data, staff only ----------
+function watchFin(){
+ if(!U||!window.can)return;
+ const want={};S.events.filter(e=>e.cloud&&can(e,'exp')).forEach(e=>want[e.id]=1);
+ Object.keys(finUn).forEach(id=>{if(!want[id]){finUn[id]();delete finUn[id];delete finLoaded[id]}});
+ Object.keys(want).forEach(id=>{
+  if(finUn[id])return;
+  finUn[id]=db.collection('events').doc(id).collection('fin').doc('data').onSnapshot(sn=>{
+   const E=S.events.find(x=>x.id===id);if(!E)return;
+   if(sn.exists){const d=sn.data();FINK.forEach(k=>{E[k]=arr(d[k])});finLoaded[id]=1}
+   if(sent[id])Object.assign(sent[id],finParts(E));
+   persist();render();
+  },x=>{if(x.code!=='permission-denied')err(x)});
+ });
+}
+const dropFin=()=>{Object.keys(finUn).forEach(i=>{finUn[i]();delete finUn[i]});Object.keys(finLoaded).forEach(i=>delete finLoaded[i])};
+// One-time conversion of an event made before 3.5.0. Money data is copied to the staff-only document (nothing is overwritten) and then
+// removed from the event document; the attendee array becomes one entry per attendee. Safe to repeat: it does nothing once converted.
+async function migrate(id,d){
+ if(migrated[id]||!U)return;
+ const E=S.events.find(x=>x.id===id);if(!E)return;
+ const leg=LEGACY.filter(k=>d[k]!==undefined),rg=Array.isArray(d.regs);
+ if(!leg.length&&!rg)return;
+ migrated[id]=1;
+ const ref=db.collection('events').doc(id),fref=ref.collection('fin').doc('data');
+ try{
+  if(leg.length&&can(E,'exp')){
+   const fs=await fref.get({source:'server'}),have=fs.exists?fs.data():{},add={};
+   leg.forEach(k=>{const m=toMap(withIds(d[k],k[0])),h=have[k]||{},x={};Object.keys(m).forEach(i=>{if(!(i in h))x[i]=m[i]});if(Object.keys(x).length)add[k]=x});
+   if(Object.keys(add).length)await fref.set(add,{merge:true});
+   if(can(E,'event')){const del={};leg.forEach(k=>del[k]=firebase.firestore.FieldValue.delete());await ref.update(del)}
+  }
+  if(rg&&can(E,'event'))await ref.update({regs:toMap(withIds(d.regs,'r').filter(r=>r&&r.name).map(r=>{const c=Object.assign({},r);delete c.eid;return c}))});
+ }catch(x){migrated[id]=0;if(x.code!=='permission-denied')err(x)}
+}
+async function purgeSubs(ref){
+ try{for(let i=0;i<200;i++){const sn=await ref.collection('subs').limit(400).get({source:'server'});if(sn.empty)break;const b=db.batch();sn.docs.forEach(d=>b.delete(d.ref));await b.commit()}}
+ catch(x){if(x.code!=='permission-denied')throw x}
+ await ref.delete().catch(x=>{if(x.code!=='permission-denied'&&x.code!=='not-found')throw x});
+}
+// Deleting an event also deletes its money document and its public registration page with the applications.
+const purgeExtras=id=>db.collection('events').doc(id).collection('fin').doc('data').delete().catch(x=>{if(x.code!=='permission-denied'&&x.code!=='not-found')throw x})
+ .then(()=>purgeSubs(db.collection('regpages').doc(id)));
 function listen(){
  if(unsub)unsub();let first=true;
  unsub=db.collection('events').where('memberIds','array-contains',U.uid).onSnapshot(snap=>{
   const msgs=[];
   snap.docChanges().forEach(c=>{
    const id=c.doc.id,d=c.doc.data();
-   if(c.type==='removed'){delete sent[id];S.events=S.events.filter(e=>e.id!==id);S.regs=S.regs.filter(r=>r.eid!==id);window.chatDrop&&chatDrop(id);return}
-   const old=apply(id,d);
+   if(c.type==='removed'){delete sent[id];delete legacyRegs[id];if(finUn[id]){finUn[id]();delete finUn[id]}S.events=S.events.filter(e=>e.id!==id);S.regs=S.regs.filter(r=>r.eid!==id);window.chatDrop&&chatDrop(id);return}
+   const old=apply(id,d);migrate(id,d);
    if(old&&!first&&!c.doc.metadata.hasPendingWrites)diff(old,snapOf(S.events.find(e=>e.id===id)),me()).forEach(m=>msgs.push(Object.assign(m,{n:d.info.name})));
   });
-  first=false;persist();render();watchSubs();fixForms();window.chatSync&&chatSync();if(msgs.length)notify(msgs);
+  first=false;persist();render();watchSubs();watchFin();window.regWatch&&regWatch();fixForms();window.chatSync&&chatSync();if(msgs.length)notify(msgs);
  },err);
 }
 
@@ -108,22 +165,41 @@ function flush(){
   const ref=db.collection('events').doc(id),old=sent[id];delete sent[id];
   if(owners[id]===U.uid){   // chat messages and payment links (with their submissions) go first, then the event; on failure the event comes back
    let fids=[];try{fids=JSON.parse(old.forms).map(f=>f.id)}catch(x){}
-   (window.chatPurge?chatPurge(id):Promise.resolve()).then(()=>purgeForms(fids)).then(()=>ref.delete()).catch(x=>{err(x);listen()});
+   (window.chatPurge?chatPurge(id):Promise.resolve()).then(()=>purgeForms(fids)).then(()=>purgeExtras(id)).then(()=>ref.delete()).catch(x=>{err(x);listen()});
   }
   else ref.update({['members.'+U.uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(U.uid)}).catch(err);
  });
  S.events.filter(e=>e.cloud&&sent[e.id]).forEach(e=>{
-  const cur=parts(e),old=sent[e.id],upd={};
-  KEYS.forEach(k=>{if(cur[k]===old[k])return;if(MAPK.includes(k)){const a=toMap(JSON.parse(old[k])),b=toMap(JSON.parse(cur[k]));for(const i in b)if(JSON.stringify(b[i])!==JSON.stringify(a[i]))upd[k+'.'+i]=b[i];for(const i in a)if(!b[i])upd[k+'.'+i]=firebase.firestore.FieldValue.delete()}else upd[k]=JSON.parse(cur[k])});
-  if(!Object.keys(upd).length)return;
+  const cur=parts(e),old=sent[e.id],upd={},fu={},staff=can(e,'exp');
+  ALLK.forEach(k=>{
+   if(cur[k]===old[k])return;
+   const fin=FINK.includes(k);
+   if(fin&&!staff){cur[k]=old[k];return}                          // only owner, manager and treasurer write money data
+   if(k==='regs'&&legacyRegs[e.id]){cur[k]=old[k];return}         // wait for the one-time conversion to one entry per attendee
+   const tgt=fin?fu:upd;
+   if(fin||MAPK.includes(k)){
+    const a=toMap(JSON.parse(old[k])),b=toMap(JSON.parse(cur[k])),same=(x,y)=>JSON.stringify(x)===JSON.stringify(y);
+    for(const i in b){
+     if(same(b[i],a[i]))continue;
+     if(k==='regs'&&a[i]&&typeof a[i]==='object'){   // 3.5.0: only the fields that changed, so a check-in and a "paid" tick on the same attendee both survive
+      for(const f in b[i])if(!same(b[i][f],a[i][f]))tgt[k+'.'+i+'.'+f]=b[i][f];
+      for(const f in a[i])if(!(f in b[i]))tgt[k+'.'+i+'.'+f]=firebase.firestore.FieldValue.delete();
+     }else tgt[k+'.'+i]=b[i];
+    }
+    for(const i in a)if(!(i in b))tgt[k+'.'+i]=firebase.firestore.FieldValue.delete();
+   }else tgt[k]=JSON.parse(cur[k]);
+  });
+  if(!Object.keys(upd).length&&!Object.keys(fu).length){sent[e.id]=cur;return}
   if(upd.info||upd.pay)(e.forms||[]).forEach(f=>db.collection('payforms').doc(f.id).update({until:untilOf(e),evName:e.name}).catch(()=>{}));   // event date or "keep open" days changed
   if(P.ntfy&&e.ntfy){
-   const o={};KEYS.forEach(k=>o[k]=JSON.parse(old[k]));
+   const o={};ALLK.forEach(k=>o[k]=JSON.parse(old[k]));
    const nn=snapOf(e);o.members=nn.members;const msg=diff(o,nn,'').map(m=>m.text).join('; ');
    if(msg)fetch('https://ntfy.sh/'+e.ntfy,{method:'POST',body:e.name+' - '+msg}).catch(()=>{});
   }
   sent[e.id]=cur;
-  db.collection('events').doc(e.id).update(upd).catch(err);
+  if(Object.keys(upd).length)db.collection('events').doc(e.id).update(upd).catch(err);
+  if(Object.keys(fu).length)db.collection('events').doc(e.id).collection('fin').doc('data').set(nest(fu),{merge:true}).catch(err);
+  window.regPubSync&&regPubSync(e);   // seats taken / form questions changed: refresh the public registration page
  });
 }
 
@@ -154,8 +230,9 @@ async function share(id){
  const regs=S.regs.filter(r=>r.eid===id);
  S.regs.forEach(r=>{if(r.eid===id)r.eid=code});
  e.id=code;e.cloud=1;e.owner=U.uid;e.ntfy='campus-'+code+'-'+rnd(8).toLowerCase();e.members={[U.uid]:{name:U.displayName||U.email,role:'owner'}};
- const o=snapOf(e);['forms','payments','bud','ven','exp','itm'].forEach(k=>{o[k]=toMap(o[k])});
+ const o=snapOf(e),fin={};FINK.forEach(k=>{fin[k]=toMap(o[k]);delete o[k]});['forms','itm','regs'].forEach(k=>{o[k]=toMap(o[k])});
  try{await db.collection('events').doc(code).set(Object.assign(o,{owner:U.uid,ntfy:e.ntfy,members:e.members,memberIds:[U.uid]}));
+  if(FINK.some(k=>Object.keys(fin[k]).length))await db.collection('events').doc(code).collection('fin').doc('data').set(fin);
   sent[code]=parts(e);owners[code]=U.uid;V.eid=code;persist();render();toast('Shared. Code: '+code)}
  catch(x){e.id=id;e.cloud=0;S.regs.forEach(r=>{if(r.eid===code)r.eid=id});err(x)}
 }
@@ -168,8 +245,8 @@ async function join(code){
  catch(x){err(x)}
 }
 
-window.rmMember=(id,uid)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members)return;delete e.members[uid];e.tasks.forEach(k=>{if(k.who===uid)k.who=''});save();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(uid)}).catch(err)};
-window.setRole=(id,uid,role)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members||!e.members[uid])return;e.members[uid].role=role;persist();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid+'.role']:role}).catch(err)};
+window.rmMember=(id,uid)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members)return;delete e.members[uid];e.tasks.forEach(k=>{if(k.who===uid)k.who=''});save();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid]:firebase.firestore.FieldValue.delete(),memberIds:firebase.firestore.FieldValue.arrayRemove(uid),rc:{u:uid,r:'-',at:Date.now()}}).catch(err)};
+window.setRole=(id,uid,role)=>{const e=S.events.find(x=>x.id===id);if(!e||!e.members||!e.members[uid])return;e.members[uid].role=role;persist();render();if(db&&U)db.collection('events').doc(id).update({['members.'+uid+'.role']:role,rc:{u:uid,r:role,at:Date.now()}}).catch(err)};   // 3.5.0: rc tells the rules exactly which member changed
 window.SUBS=window.SUBS||{};const subUn={};
 window.pubForm=(f,e)=>{if(db&&U){markFixed(f.id);db.collection('payforms').doc(f.id).set({eid:e.id,evName:e.name,title:f.title,amt:f.amt||0,upi:f.upi,payee:f.payee,note:f.note||'',by:U.uid,byName:f.byName||'',at:f.at,until:untilOf(e)}).catch(err)}};
 // Deleting a link also deletes the payments people submitted through it (Firestore never removes sub-collections by itself).
@@ -263,7 +340,7 @@ if(ready){
   if(u&&!u.emailVerified){firebase.auth().signOut();return}
   U=u;window.MYUID=u?u.uid:'';window.MYNAME=u?(u.displayName||u.email.split('@')[0]):'';
   if(u){document.documentElement.classList.remove('gate');askPerm();listen();render()}
-  else{if(unsub)unsub();window.chatDrop&&chatDrop();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}
+  else{if(unsub)unsub();dropFin();window.regDrop&&regDrop();window.chatDrop&&chatDrop();Object.keys(subUn).forEach(i=>{subUn[i]();delete subUn[i]});authUI()}
  });
 }
 })();

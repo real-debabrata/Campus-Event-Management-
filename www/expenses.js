@@ -4,8 +4,9 @@
      or have paid vendors) and Vendors. Forms open from buttons, so the page stays short.
    - Items to buy now live in the Tasks tab (itemsV below). Their cost still counts in the budget: bought items as spent, items still
      to buy as "to pay" (their estimate).
-   Data is stored exactly as before inside the event document (bud = budget lines, ven = vendors, exp = bills, itm = items), so
-   it syncs, works offline, and nothing needs migrating.
+   3.5.0: bud, ven and exp (budget lines, vendors, bills) now live in the staff-only document events/{id}/fin/data (see sync.js), not in the event
+   document, so members cannot read or change them. itm (items to buy) stays in the event document because every member sees it. Budget categories
+   are only known to staff, so the category picker in the item form shows only for them.
    Who can do what (see PERM in app2.js):
    - exp   (owner, manager, treasurer): budget, vendors, bills. Other roles do not see the Expenses tab.
    - items (owner, manager, treasurer, lead): add items and allocate them. Everybody sees the list; the person an item is
@@ -171,7 +172,7 @@ window.itemsV=function(e){
    <div><label>Quantity</label><input name="q" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
    <div><label>Estimated cost in ₹ (whole line)</label><input name="p" type="number" min="0" step="any" inputmode="decimal"></div>
    <div><label>Allocate to</label><select name="w"><option value="">Unassigned</option>${ass.map(a=>`<option value="${a.id}">${esc(a.n)}</option>`).join('')}</select></div>
-   <div><label>Budget category</label><select name="c">${catOpts(e)}</select></div></div>
+   ${(e.bud||[]).length?`<div><label>Budget category</label><select name="c">${catOpts(e)}</select></div>`:''}</div>
    <div class="acts"><button class="btn" type="submit">Add item</button><button type="button" class="btn ghost" data-x="ia" data-e="${e.id}">Close</button></div></form>`:'';
  const by={};all.forEach(i=>{const k=i.who||'';(by[k]=by[k]||[]).push(i)});
  const who=Object.keys(by).map(k=>{const l=by[k];return `<div class="li" style="padding:7px 0"><div class="main"><div class="ttl">${esc(k?pname(e,k):'Unassigned')}${k&&k===me()?' <span class="pill">you</span>':''}</div><div class="sub">${l.length} item${l.length>1?'s':''}, ${l.filter(i=>i.s==='bought').length} bought</div></div><span class="sub">To buy ${R(sum(l.filter(i=>i.s!=='bought'),'p'))}, spent ${R(sum(l.filter(i=>i.s==='bought'),'ac'))}</span></div>`}).join('');

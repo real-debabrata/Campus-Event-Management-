@@ -1,4 +1,5 @@
-/* CEM app2.js. Roles and permissions, Tasks (with Items to buy), People, Payments (money in) and "My tasks".
+/* CEM app2.js. 3.5.0: payment-link forms no longer write the event's UPI details unless you are organizer, manager or treasurer (the rules allow only those roles to change them); payRowsOf and siteBase are shared with income.js, signup.js and scan.js.
+   Roles and permissions, Tasks (with Items to buy), People, Payments (money in) and "My tasks".
    3.4.0: Tasks now also lists Items to buy (drawn by expenses.js), People no longer holds the participant teams (they moved to
    Attendees, see event.js), and Payments is reorganised: payments to check first, forms behind buttons, settings tucked away.
    Roles, permissions and the stored data are unchanged. */
@@ -106,6 +107,9 @@ function payData(e){
  return{base,mgr,fs,rows:[...subs,...leg].sort((x,y)=>(y.at||0)-(x.at||0))};
 }
 window.payPendingN=e=>payData(e).rows.filter(p=>p.s==='pending').length;
+window.siteBase=payBase;   // public site address (pay.html, register.html, ticket.html live there)
+// every payment shown in the Payments tab as plain rows, for the CSV export
+window.payRowsOf=e=>{const d=payData(e);return d.rows.map(p=>({title:((d.fs.find(f=>f.id===p.fid)||{}).title)||'Earlier payment',n:p.n,a:p.a,utr:p.utr||'',s:p.s,at:p.at}))};
 window.payV2=function(e){
  const {base,mgr,fs,rows}=payData(e),w=can(e,'write'),f=V.pfl||'all';
  const sum=s=>rows.filter(p=>p.s===s).reduce((t,p)=>t+p.a,0),old=mgr?(e.don||[]).reduce((t,x)=>t+x.a,0):0,pend=rows.filter(p=>p.s==='pending').length;
@@ -172,7 +176,7 @@ document.addEventListener('change',x=>{
 document.addEventListener('submit',x=>{
  const f=x.target,E=cur(),fd=new FormData(f),g=k=>(fd.get(k)||'').toString().trim();
  if(f.id==='pgf'){if(!can(E,'pay'))return;const g2=Math.max(0,Math.min(30,Math.round(+g('g'))||0));E.pay=Object.assign(E.pay||{},{grace:g2});sv();toast(g2?'Links stay open '+g2+' extra day'+(g2>1?'s':''):'Links close at the end of the event day')}
- else if(f.id==='pfc'){if(!E.cloud)return;if(window.untilOf&&Date.now()>untilOf(E))return toast('This event is over, so the link would already be expired');const id=(uid()+uid()).slice(0,12),fm={id,title:g('t'),amt:+g('a')||0,upi:g('u'),payee:g('p'),note:g('n'),by:me(),byName:myName(),at:Date.now()};E.forms.push(fm);E.pay=Object.assign(E.pay||{},{upi:g('u'),payee:g('p')});window.pubForm(fm,E);V.pnw=false;sv();toast('Payment link created')}
+ else if(f.id==='pfc'){if(!E.cloud)return;if(window.untilOf&&Date.now()>untilOf(E))return toast('This event is over, so the link would already be expired');const id=(uid()+uid()).slice(0,12),fm={id,title:g('t'),amt:+g('a')||0,upi:g('u'),payee:g('p'),note:g('n'),by:me(),byName:myName(),at:Date.now()};E.forms.push(fm);if(can(E,'pay'))E.pay=Object.assign(E.pay||{},{upi:g('u'),payee:g('p')});window.pubForm(fm,E);V.pnw=false;sv();toast('Payment link created')}
  else if(f.id==='pbf'){try{localStorage.setItem('pay-base',g('b').replace(/\/?$/,'/'))}catch(q){}render();toast('Site address saved')}
  else if(f.id==='grf'){if(!can(E,'tasks')||!g('n'))return;E.groups.push({id:uid(),n:g('n').slice(0,40)});V.tg=false;sv();toast('Group added')}
  else if(f.classList.contains('tk2')){const w=g('w')||me();if(!assignees(E).some(a=>a.id===w))return toast('You can only assign to yourself or your subordinates');
