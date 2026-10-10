@@ -38,6 +38,105 @@ service cloud.firestore {
         && d.get('until', 99999999999999) > request.time.toMillis();
     }
 
+    // v3.5.0: the public registration page is live while the organizer has it switched on, the event still exists and the closing time has not passed.
+    function liveReg(d) {
+      return d.open == true
+        && d.until > request.time.toMillis()
+        && exists(/databases/$(database)/documents/events/$(d.eid));
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // v3.5.0: who may change what in the event document.
+    //
+    // Before 3.5.0 any member could write any field of the event, including their own role and the budget.
+    // Now each role has a short list of top-level fields it may change. The money data (budget, vendors, bills,
+    // payments, sponsors) is not in this document any more: it lives in events/{id}/fin/data, readable and
+    // writable only by owner, manager and treasurer.
+    // ------------------------------------------------------------------------------------------------
+    // Fields that moved to events/{id}/fin/data. They may only be DELETED from the event document (the one-time clean-up).
+    function legacy() { return ['bud','ven','exp','payments','don']; }
+    function topChanged() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function evRole() { return resource.data.members[request.auth.uid].role; }
+    function amMember() { return request.auth.uid in resource.data.memberIds; }
+
+    function fieldsOk() {
+      let r = evRole();
+      let ch = topChanged();
+      return (r in ['owner','organizer'] && ch.hasOnly(['info','team','groups','tasks','teams','pay','regs','forms','itm','ntfy','rc','members','memberIds','bud','ven','exp','payments','don']))
+          || (r == 'manager' && ch.hasOnly(['info','team','groups','tasks','teams','pay','regs','forms','itm','rc','members','memberIds','bud','ven','exp','payments','don']))
+          || (r == 'treasurer' && ch.hasOnly(['team','tasks','teams','pay','regs','forms','itm']))
+          || (r == 'lead' && ch.hasOnly(['team','groups','tasks','teams','regs','forms','itm']))
+          || (r == 'member' && ch.hasOnly(['team','tasks','teams','regs','forms','itm']));
+    }
+
+    // Attendees are one map entry each (regs.<id>). Organizer and manager: everything. Treasurer and team lead: add and change
+    // (check-in, paid, team), never remove. Member: add only. A document holds 1 MiB; 1500 entries is the safety stop (see README).
+    function regsOk() {
+      let r = evRole();
+      return !topChanged().hasAny(['regs'])
+        || (request.resource.data.regs.size() <= 1500
+            && (r in ['owner','organizer','manager']
+                || (r in ['treasurer','lead'] && request.resource.data.regs.diff(resource.data.regs).removedKeys().size() == 0)
+                || (r == 'member'
+                    && request.resource.data.regs.diff(resource.data.regs).removedKeys().size() == 0
+                    && request.resource.data.regs.diff(resource.data.regs).changedKeys().size() == 0)));
+    }
+
+    function legacyOk() {
+      return !topChanged().hasAny(legacy()) || !request.resource.data.keys().hasAny(legacy());
+    }
+
+    // Changing someone else's role, or removing them. The app sends a small witness field rc = {u: their id, r: new role or '-', at: time}.
+    // The rules cannot loop over the members map, so they require that exactly the member named in rc changed, and that the new role matches rc.
+    // Owner: can set manager, treasurer, lead, member, viewer. Manager: can set treasurer, lead, member, viewer, and cannot touch another manager or the owner.
+    function peopleOk() {
+      let n = request.resource.data;
+      let o = resource.data;
+      let r = evRole();
+      return r in ['owner','organizer','manager']
+        && topChanged().hasOnly(['rc','members','memberIds'])
+        && n.owner == o.owner
+        && n.rc is map && n.rc.u is string && n.rc.r is string && n.rc.at is number
+        && n.rc.u != request.auth.uid
+        && n.rc.u in o.members
+        && !(o.members[n.rc.u].role in ['owner','organizer'])
+        && (r != 'manager' || o.members[n.rc.u].role != 'manager')
+        && n.members.diff(o.members).affectedKeys() == [n.rc.u].toSet()
+        && (n.rc.r == '-'
+            ? (!(n.rc.u in n.members) && n.memberIds.toSet() == o.memberIds.toSet().difference([n.rc.u].toSet()))
+            : (n.rc.r in (r == 'manager' ? ['treasurer','lead','member','viewer'] : ['manager','treasurer','lead','member','viewer'])
+               && n.members[n.rc.u].role == n.rc.r
+               && n.members[n.rc.u].keys().hasOnly(['name','role'])
+               && n.members[n.rc.u].name == o.members[n.rc.u].name
+               && n.memberIds.toSet() == o.memberIds.toSet()));
+    }
+
+    // Anyone in the event may change THEIR OWN display name, nothing else about themselves.
+    function ownNameOk() {
+      let n = request.resource.data;
+      let o = resource.data;
+      let me = request.auth.uid;
+      return amMember()
+        && topChanged().hasOnly(['members'])
+        && n.members.diff(o.members).affectedKeys() == [me].toSet()
+        && n.members[me].keys().hasOnly(['name','role'])
+        && n.members[me].role == o.members[me].role
+        && n.members[me].name is string
+        && n.members[me].name.size() >= 2 && n.members[me].name.size() <= 40;
+    }
+
+    // Leaving an event: remove only yourself (the owner cannot leave, the owner deletes the event).
+    function leaveOk() {
+      let n = request.resource.data;
+      let o = resource.data;
+      let me = request.auth.uid;
+      return amMember() && o.owner != me
+        && topChanged().hasOnly(['members','memberIds'])
+        && !(me in n.members)
+        && n.members.diff(o.members).affectedKeys() == [me].toSet()
+        && n.memberIds.toSet() == o.memberIds.toSet().difference([me].toSet());
+    }
+
     // A non-member may only add THEMSELVES as a plain 'member'. Nothing else may change.
     function joinOk() {
       let n = request.resource.data;
@@ -56,12 +155,30 @@ service cloud.firestore {
       // Private: only organiser and joined members can read an event.
       allow get: if signedIn() && (resource == null || request.auth.uid in resource.data.memberIds);
       allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
+
+      // A new event has exactly one member: its creator, as owner.
       allow create: if signedIn()
         && request.resource.data.owner == request.auth.uid
-        && request.auth.uid in request.resource.data.memberIds;
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.members.keys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid].role == 'owner';
+
       allow update: if signedIn() && (
-        request.auth.uid in resource.data.memberIds || joinOk());
+        joinOk()
+        || leaveOk()
+        || ownNameOk()
+        || (amMember() && fieldsOk() && regsOk() && legacyOk() && (!topChanged().hasAny(['members','memberIds','rc']) || peopleOk())));
+
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+
+      // Money data (v3.5.0): budget lines (bud), vendors (ven), vendor bills (exp), earlier payments (payments), donations (don)
+      // and sponsors (spn), one map per kind with one entry per item. Staff only: owner, manager, treasurer.
+      match /fin/{doc} {
+        allow read: if isStaff(id);
+        allow create, update: if isStaff(id)
+          && request.resource.data.keys().hasOnly(['bud','ven','exp','payments','don','spn']);
+        allow delete: if isStaff(id);
+      }
 
       // Event chat (v2.0.0). Members read everything, including messages sent before they joined.
       match /chat/{mid} {
@@ -132,6 +249,45 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['s'])
           && request.resource.data.s in ['pending','verified','rejected'];
         allow delete: if seesForm(fid);
+      }
+    }
+
+    // v3.5.0: public self-registration. One page per event; its document id is the event code.
+    // Anyone with the link can read the page (event name, date, seats, form questions) and send an application,
+    // but only while the page is live. Only owner, manager and treasurer can read applications and approve them.
+    match /regpages/{eid} {
+      allow get: if resource == null
+        || liveReg(resource.data)
+        || (signedIn() && isStaff(eid));
+      allow list: if false;
+      allow create, update: if signedIn() && isStaff(eid)
+        && request.resource.data.eid == eid
+        && request.resource.data.open is bool
+        && request.resource.data.until is number;
+      allow delete: if signedIn() && isStaff(eid);
+
+      match /subs/{sid} {
+        // The document id is the normalised College ID, so one College ID can apply only once per event (a second create becomes an
+        // update, which the public cannot do). The answers travel as one JSON string 'x' (max 3000 characters) so a spammer cannot send huge documents.
+        allow create: if request.resource.data.keys().hasOnly(['n','cid','x','em','ph','s','at','utr'])
+          && request.resource.data.n is string
+          && request.resource.data.n.size() > 0 && request.resource.data.n.size() <= 80
+          && request.resource.data.cid is string
+          && request.resource.data.cid.matches('[A-Z0-9]{3,24}')
+          && request.resource.data.cid == sid
+          && request.resource.data.x is string && request.resource.data.x.size() <= 3000
+          && (!('em' in request.resource.data) || (request.resource.data.em is string && request.resource.data.em.size() <= 100))
+          && (!('ph' in request.resource.data) || (request.resource.data.ph is string && request.resource.data.ph.size() <= 20))
+          && (!('utr' in request.resource.data) || (request.resource.data.utr is string && request.resource.data.utr.matches('[A-Z0-9]{6,40}')))
+          && request.resource.data.s in ['pending','waitlist']
+          && request.resource.data.at is number
+          && exists(/databases/$(database)/documents/regpages/$(eid))
+          && liveReg(get(/databases/$(database)/documents/regpages/$(eid)).data);
+        allow get, list: if signedIn() && isStaff(eid);
+        allow update: if signedIn() && isStaff(eid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['s','ri'])
+          && request.resource.data.s in ['pending','waitlist','approved','rejected'];
+        allow delete: if signedIn() && isStaff(eid);
       }
     }
 

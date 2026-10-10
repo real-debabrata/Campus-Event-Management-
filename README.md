@@ -1,9 +1,58 @@
-# Campus Events (CEM) 3.4.0
+# Campus Events (CEM) 3.5.0
 
-Plan campus events with your team: registrations, tasks, roles, UPI payment links, a chat inside every event, and a budget with bills and vendors.
+Plan campus events with your team: registrations, tasks, roles, UPI payment links, a chat inside every event, a budget with bills and vendors, public self-registration, QR tickets with scan-to-check-in, and an income and sponsor tracker.
 Runs as an Android app (APK built by GitHub, no installs) and as a website. Everything fits in the free plans of GitHub and Firebase (Spark).
 
-## What's new in 3.4.0: a tidier event page
+## What's new in 3.5.0: safer data, self-registration, QR tickets, sponsors
+Everything stays on the free plans (GitHub, Firebase Spark, no Cloud Functions, no card). **This upgrade needs new `firestore.rules` and converts old events once, so read SETUP.md > Upgrade to 3.5.0 before you start** (about 20 minutes).
+
+### 1. Permissions fixed (`firestore.rules`)
+Before 3.5.0 any member could write any field of the event, including their own role, and the budget, vendors and bills sat in the event document where every member could read them. Now:
+
+| Role | May change in the event document |
+| --- | --- |
+| Organizer (owner) | everything except who the owner is |
+| Manager | everything except the owner, other managers' roles and the notification topic |
+| Treasurer | their own tasks, people they add, teams, payment settings (`pay`), attendees (add and change, never delete), payment links, items to buy |
+| Team lead | task groups, tasks, people they add, teams, attendees (add and change, never delete), items to buy, payment links |
+| Member | tasks they may tick, people who report to them, teams, items they were given, payment links, and **adding** attendees (no check-in, no deleting) |
+| Viewer | nothing |
+
+- **Roles can only be changed by organizer and manager.** The owner can set manager, treasurer, lead, member, viewer; a manager can set treasurer, lead, member, viewer and cannot touch another manager or the owner. Everyone can still change their own display name or leave an event.
+- **Money data moved to a staff-only document** `events/{id}/fin/data`: budget lines (`bud`), vendors (`ven`), vendor bills (`exp`), earlier payments (`payments`), donations (`don`) and the new sponsors (`spn`). Only organizer, manager and treasurer can read or write it. Members and viewers no longer receive it at all (before, the app only hid it).
+- The conversion of an existing event is automatic: the first time the organizer or a manager opens the new app, the money data is copied to the staff-only document, removed from the event document, and the attendee array is converted. Nothing is overwritten and it is safe to repeat.
+
+### 2. One entry per attendee
+Attendees are stored as `regs.<id>`, one map entry each, the same way bills and vendors already were (`MAPK` in `www/sync.js`). Two gate volunteers checking in different people no longer overwrite each other. The app also writes **only the fields that changed** (`in`, `inAt`, `inBy`), so a check-in and a "paid" tick on the *same* person both survive. One Firestore document holds 1 MiB. That is plenty for a few hundred attendees (an attendee with a few answers is roughly 300 to 500 bytes). The rules stop at 1,500 entries as a safety net; **if you expect more than about 800 attendees, move attendees to a sub-collection** (`events/{id}/regs/{rid}`), which also allows rules per attendee.
+
+### 3. Public self-registration (`register.html`)
+Works like `pay.html`: public form, then pending, then approve.
+- Attendees tab > **Open online registration** (organizer, manager, treasurer). You get a link and a QR code to share; the page shows the event, seats left and **your own registration form questions**. No account needed.
+- **Duplicate check on College ID.** The application is stored under the College ID, so the same ID cannot apply twice (enforced by the rules, not just the page). Approving also checks the ID against the attendees you already have, and adding an attendee by hand does the same.
+- **Waitlist.** When the seats are full the page says so and stores applications as *waitlist*. When a seat frees up, **Promote** (or **Promote next**) moves people in. Approval re-checks the seats, so the event can never be overbooked by the form.
+- **Optional fee.** Set a ticket price and UPI ID (Price and settings). The page shows the UPI QR, exactly like a payment link, and an optional UTR box. Pay-later is fine. **Approve and mark paid** records the fee after you checked your UPI app.
+- Free-plan cost: one write per application and one read per application per organizer device. A public form is tiny next to Spark's daily limits (50,000 reads, 20,000 writes).
+
+### 4. QR tickets and scan-to-check-in
+- Every attendee has a QR ticket (Attendees > **...** > **Ticket (QR)**). Share a ticket link (`ticket.html`), copy it, save the QR image, or send it by WhatsApp or email. Approved online applications show a **Ticket (QR)** button too.
+- **Scan tickets** (organizer, manager, treasurer, team lead). **Android app:** the free `@capacitor-mlkit/barcode-scanning` plugin (Google's scanner screen). **Website:** the browser's built-in `BarcodeDetector` where it exists, otherwise the small `jsQR` library (`www/vendor/jsQR.js`, Apache-2.0, loaded only when needed). A box for typing a ticket code or College ID works everywhere.
+- Already-checked-in tickets show a warning with the time and who checked them in. Unpaid fees show a one-tap **Mark as paid**.
+- **Offline:** scanning uses the attendee list already cached on the phone and Firestore queues the check-ins until the network returns. Open the event once with a connection before the gate opens.
+
+### 5. Income, sponsors, break-even, CSV export
+- **Income tab** (organizer, manager, treasurer): for each sponsor (or donation / other income) the amount **committed**, the amount **received**, what you **promised** them and whether it is **delivered**.
+- **Break-even:** `ticket price x seats + sponsorship` against total cost (your budget, or what you spent plus still have to pay, one tap to switch). It tells you how many tickets you need, how many registrations to go, or that even a full house falls short, with a bar showing income against the cost line.
+- **Export data** (Details and Income tabs): attendees, payments, bills and sponsors as CSV, or everything in one ZIP. On Android it opens the share sheet (Drive, WhatsApp, Files). Cells starting with `= + - @` are escaped so spreadsheets never run them as formulas.
+
+### Known limits (please read)
+- The rules cannot loop over a map, so per-attendee field rules are not possible while attendees are map entries. They enforce the role table above (for example a member can add attendees but not check them in); a volunteer who is allowed to change attendees could still edit another attendee's fields.
+- `tasks`, `team` and `teams` are still whole-field writes, so two people ticking different tasks at the same instant can overwrite each other (attendees, bills, vendors, items, payment links and sponsors cannot).
+- Every member (including viewers) can still read the attendee list with College IDs, phones and emails. Money data is now staff-only; attendee contact details are not.
+- The public registration form has no rate limit (Firestore rules cannot count requests). The College ID rule stops duplicates and the size limits stop huge documents, but someone could send many applications with different made-up IDs. Close the page, or delete applications (Remove), if that happens. Adding Firebase App Check later is the free next step.
+- A QR ticket is a bearer ticket: whoever has the link or image can use it once (the second scan warns). The ticket id is 12 random characters, so it cannot be guessed.
+- The new rules could not be run against the Firebase emulator when this release was prepared (it needs downloads that were not available). The app logic was tested against a mock database; **run the checklist in SETUP.md > Upgrade to 3.5.0 on a test event before you rely on it.**
+
+## What was new in 3.4.0: a tidier event page
 A redesign of the event screen. **Your data, sign-in, rules and Cloudflare Worker are untouched**, so upgrading is just replacing a few files (**SETUP.md > Upgrade to 3.4.0**, about 5 minutes, nothing to migrate).
 
 **Where things are now**
@@ -130,15 +179,21 @@ An app installed from a build that used a random key (or a different key) can ne
 Notes: the app version people see (`APP_VERSION` in www/ui.js) and Android's `versionCode` are separate. Bump `APP_VERSION` for what users read; `versionCode` is set automatically on every build. If you build on your computer (Option B), make sure the same key is used, otherwise that APK cannot update one built by GitHub.
 
 ## Set up Firebase, chat and the website
-Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: **"Upgrade to 3.4.0" (new event page, files only)**, "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) **"Upgrade to 3.2.0" (email-code sign-up)** and **"Upgrade to 3.3.0" (Google sign-in)**).
+Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade steps: **"Upgrade to 3.5.0" (new rules, self-registration, QR tickets, sponsors: read this one first)**, "Upgrade to 3.4.0" (new event page, files only), "Upgrade to 2.0.0" (chat), "Upgrade to 3.1.0" (expenses, payment-link expiry, tagging) **"Upgrade to 3.2.0" (email-code sign-up)** and **"Upgrade to 3.3.0" (Google sign-in)**).
 
 ## Files
 | Path | What it does |
 | --- | --- |
 | www/index.html | Main app shell: dashboard, event list, event form, registration actions |
-| www/event.js | The event page: header, tab bar, Details, Attendees and the Team maker (new in 3.4.0) |
+| www/event.js | The event page: header, tab bar, Details, Attendees and the Team maker (3.4.0); Income tab, Scan and Ticket buttons (3.5.0) |
+| www/signup.js | Online registration, organizer side: open/close, link and QR, review applications, approve, waitlist (new in 3.5.0) |
+| www/register.html | The public self-registration page (new in 3.5.0) |
+| www/scan.js | QR tickets, ticket window and the ticket scanner (new in 3.5.0) |
+| www/ticket.html | A person's QR ticket page, opened from a link (new in 3.5.0) |
+| www/income.js | Income tab, sponsors, break-even, CSV and ZIP export (new in 3.5.0) |
+| www/vendor/jsQR.js | QR decoder for browsers without BarcodeDetector. Apache-2.0, see vendor/jsQR.LICENSE.txt (new in 3.5.0) |
 | www/event.css | Styles for the event page: tabs, lists, status pills, budget cards (new in 3.4.0) |
-| www/sync.js | Firebase sign-in, live sync, alerts |
+| www/sync.js | Firebase sign-in, live sync, alerts. 3.5.0: staff-only money document, one entry per attendee, one-time conversion of old events |
 | www/app2.js | Roles and permissions, Tasks, People, Payments (money in) and payment-link expiry |
 | www/expenses.js | Expenses & Budget (budget, bills, vendors) and the Items to buy list shown in Tasks (3.1.0, redesigned in 3.4.0) |
 | www/chat.js | Event chat, @tagging, full-screen layout |
@@ -153,15 +208,16 @@ Follow **SETUP.md** (Firebase project, rules, GitHub Pages, and the upgrade step
 | scripts/patch-google-signin.sh | Turns on the Google libraries in the generated Android project and writes `google-services.json` from the `GOOGLE_SERVICES_JSON` secret (new in 3.3.0) |
 | .github/workflows/show-key-fingerprint.yml | Run once: prints the SHA-1 of your permanent key for Firebase (new in 3.3.0) |
 | .npmrc | Stops npm from downloading an unused copy of the `firebase` package (new in 3.3.0) |
+| scripts/patch-scanner.sh | Adds the camera permission and the scanner meta-data to the generated Android manifest (new in 3.5.0) |
 | scripts/patch-android.sh | Writes the signing key path and an ever-increasing versionCode into the generated Android project |
 | signing/debug.keystore.gpg | Your encrypted permanent key. Never delete it |
-| firestore.rules | Security rules (3.3.0: only confirmed emails may use the database). Paste into Firebase console > Firestore > Rules |
+| firestore.rules | Security rules (3.5.0: field limits per role, staff-only money document, public registration pages; 3.3.0: only confirmed emails). Paste into Firebase console > Firestore > Rules |
 
 ## Notes
 - **Google sign-in and the confirmed-email rule (3.3.0).** `firestore.rules` has one switch, `requireVerifiedEmail()`, set to `true`. Leave it on. Turning it off while Firebase's public sign-up is on lets bots create accounts that can use your free Firestore quota.
 - **Google sign-in in the APK needs three things to line up:** the SHA-1 of your permanent key registered in Firebase, the Android app registered with package name `com.campus.events`, and the `GOOGLE_SERVICES_JSON` secret downloaded *after* the first two. Phones without Google Play services cannot use the Google button (email sign-in still works).
 - Event data is cached on the phone and synced through Firebase. Chat and payment links need a shared event.
-- Budget, vendors, payments and items are stored inside the event document. The app hides the money sections from members who are not organizer, manager or treasurer, but everyone in the event can technically read the event document. Do not share an event code with people you do not trust with the budget.
+- Since 3.5.0 the budget, vendors, bills, donations and sponsors live in a separate document that only organizer, manager and treasurer can read (see above). Items to buy, tasks, attendees and payment links are still in the event document, which every member can read, so do not share an event code with people you do not trust with attendee details.
 - **Sign-up codes and free limits.** Brevo's free plan sends 300 emails a day, so at most about 300 codes a day (a resend is another email). Cloudflare's free plan is 100,000 requests a day and 1,000 stored writes a day; each code request uses 2 of those writes, so roughly 400 requests a day before it pauses. Nothing but sign-up is affected when a limit is reached: sign-in goes straight to Firebase.
 - **What the code does and does not do.** It proves the person owns the email address and makes bulk sign-up slow and costly. It cannot stop someone who really owns many inboxes. Turn on the Turnstile captcha and `ALLOWED_EMAIL_DOMAINS` (for example your college domain) in the Worker for stronger protection.
 - Keep the Firebase service-account key and the Brevo key only as Cloudflare secrets. Never put them in this repository. The `worker/` folder is not part of the website or the APK.

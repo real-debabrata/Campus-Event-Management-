@@ -406,3 +406,82 @@ Keep a copy of the old `www` files before you replace them. To go back, restore 
 | The page looks unstyled (no tab bar) | `event.css` is missing or was not uploaded. |
 | Old layout still shows | The website was not redeployed (A2), or the browser cache needs a refresh. |
 | A member asks where Expenses went | By design: only organizer, manager and treasurer have it. Items to buy are in **Tasks**. |
+
+
+## Upgrade to 3.5.0: safer permissions, self-registration, QR tickets, sponsors
+
+3.5.0 is **not** a files-only upgrade. It needs new Firestore rules, new files, a one-time conversion of your existing events, and (for scanning inside the APK) three new npm packages. Everything stays free: no Cloud Functions, no Blaze plan, no card.
+
+**Read this first**
+- **Old apps cannot work with the new rules.** An app older than 3.5.0 will show "No permission" when it tries to save attendees, budget items or roles. Update the website and the APK, then set `min` to `3.5.0` (step 5).
+- **Do the steps in the order below**, close together (the whole thing is about 20 minutes). The new app writes to a new place that the old rules do not allow, and the new rules reject old apps.
+- **Before you start,** if the budget matters, note down or screenshot your budgets, bills and vendors for each event. Your data is copied, not moved blindly, and the old copy is only removed after the new one is written, but a safety copy costs nothing.
+
+### Files
+In the repo root replace: `firestore.rules`, `package.json`, `README.md`, `SETUP.md`.
+In `www/` replace: `index.html`, `sync.js`, `app2.js`, `expenses.js`, `event.js`, `event.css`, `ui.js`.
+In `www/` add (new): `signup.js`, `scan.js`, `income.js`, `register.html`, `ticket.html`, and `vendor/jsQR.js` with `vendor/jsQR.LICENSE.txt`.
+In `scripts/` add (new): `patch-scanner.sh`. In `.github/workflows/` replace: `build-apk.yml`.
+Not changed: `login.html`, `pay.html`, `chat.js`, `splash.js`, `splash.css`, `firebase-config.js`, the Worker, the signing key, your secrets.
+
+### Steps
+1. **Upload the files** above to GitHub and commit to `main`. Pushing starts **Build APK** by itself (it now also adds the scanner, see "Android" below). Do not install that APK yet.
+2. **Publish the new rules.** Firebase console > Firestore Database > **Rules** > select everything > paste the new `firestore.rules` > **Publish**. Confirm there are no red error markers in the editor before you publish.
+3. **Deploy the website straight away.** Actions > **Deploy web version** > Run workflow. Wait for the green tick, open the site, refresh once, and check account menu > About & updates shows **v3.5.0**.
+4. **Convert your events (the organizer does this once).** Open the new website or APK **as the organizer (or a manager)** and open each existing shared event once. Within a few seconds the app:
+   - copies budget lines, vendors, bills, earlier payments and donations into `events/{code}/fin/data`, then removes them from the event document, and
+   - turns the attendee list into one entry per attendee.
+
+   Check it: Firebase console > Firestore > Data > `events` > your event. You should see a `fin` sub-collection with a `data` document, and `regs` as a map of attendees (not a list). Open the Expenses tab: the budget must look as before. A **treasurer** who opens the app first sees the budget straight away and copies the money data across, but only the organizer or a manager can remove the old copy and convert the attendee list. Until then people with the member role cannot add attendees (the rules wait for the conversion). Events that are not shared (only on one phone) need nothing.
+5. **Ask people to update.** Firestore > `appconfig` > `version`: set `latest` and `min` to `3.5.0` and add `notes` such as "Safer permissions, online registration, QR tickets". Install the new APK over the old one (Actions > Build APK > download the artifact).
+6. **Run the test checklist below on a test event** before the real event.
+
+### Android: scanning inside the APK
+`npm install` now also installs `@capacitor-mlkit/barcode-scanning`, `@capacitor/filesystem` and `@capacitor/share` (all free). The new workflow step `scripts/patch-scanner.sh` adds the camera permission and the scanner meta-data to the generated manifest, so there is nothing to do by hand. Notes:
+- Scanning uses Google's scanner screen (Google Play services), which needs no camera permission at run time. The first scan on a phone may download the scanner component (a few seconds, needs internet; if you pre-install the app with internet it is fetched at install time). A phone without Google Play services cannot scan; use the box for typing the ticket code or College ID.
+- CSV and ZIP files open the Android share sheet (Save to Drive, WhatsApp, Files).
+- If you build on your own computer (Option B in the README), run `bash scripts/patch-scanner.sh` after `npx cap add android`.
+
+### Test checklist (15 minutes, test event with a second account)
+1. **Rules and roles.** Sign in as a plain *member* on a second account. Check that the **Income** and **Expenses** tabs are missing, **Scan tickets** is missing, and there is no **Check in** button. As organizer, change that account's role to *treasurer*: Income and Expenses appear. A member can still tick their own tasks and **Register attendee**.
+2. **Staff-only money.** In Firebase console > Firestore > Data, open `events/{code}`: no `bud`, `ven`, `exp`, `payments` or `don` fields. They are under `fin` > `data`.
+3. **Two volunteers, one list.** On two devices (organizer and a team lead) check in two *different* attendees at the same moment. Both stay checked in. Check in the same person on one device and mark them paid on the other: both stay.
+4. **Self-registration.** Attendees > **Open online registration**. Open the link in a private window. Register with a College ID. It appears under **Applications to review**. Open the link again and use the **same** College ID: it must say it was already registered. Set the event capacity to the number of attendees you have and register a new person: the page says the event is full and offers the waitlist; the application lands under **Waitlist**. Raise the capacity and tap **Promote**.
+5. **Fee.** In **Price and settings** set a ticket price and UPI ID. The public page shows the UPI QR and an optional UTR box. Submit with a UTR and use **Approve and mark paid**: the attendee shows **Paid**.
+6. **Tickets and scanning.** Attendees > **...** > **Ticket (QR)**: share the link and open it on a phone. **Scan tickets**: scan the QR (APK, or Chrome on a phone). The attendee is checked in. Scan again: "Already checked in". Switch the phone to airplane mode, scan another ticket, then switch the network back: the check-in reaches the other device.
+7. **Income.** Income tab: set a ticket price, add a sponsor with a promise, tick "Promises delivered", and check the break-even text and bar move when you change the budget.
+8. **Export.** Details tab > **Download everything (ZIP)** and open a CSV in Excel or Google Sheets.
+9. **Delete.** Delete the test event. In Firestore > Data the event, its `fin` document, the `regpages/{code}` document and its `subs` are gone.
+
+### How it works
+- **Rules per role.** `firestore.rules` lists, for each role, the top-level fields of the event document it may change (`fieldsOk`). Attendee changes are checked per entry: organizer and manager anything, treasurer and team lead add and change but not remove, member add only (`regsOk`). Roles are changed by sending the member's new role together with a small witness field `rc = {u, r, at}`; the rules require that exactly the member named in `rc` changed and that the new role matches (`peopleOk`), because rules cannot loop over the members list. Own name change, leaving an event and joining by code are separate narrow rules.
+- **Money data.** `events/{id}/fin/data` holds one map per kind (`bud`, `ven`, `exp`, `payments`, `don`, `spn`), one entry per item (`exp.<id>`), so two treasurers adding different bills never overwrite each other. Only owner, manager and treasurer can read or write it, enforced by `isStaff` in the rules.
+- **Attendees.** `regs.<id>` is one map entry per attendee. The app writes only changed fields (`regs.<id>.in`). An entry that is missing a name is ignored when loading (it can only come from a stale device writing to an attendee someone deleted).
+- **Public registration.** `regpages/{event code}` is a small public document written by staff devices: event name, date, seats taken, the form questions, price and UPI details, and an `open` switch and closing time (end of the event day). The page is readable only while it is open, the closing time has not passed and the event still exists (`liveReg`). Applications go to `regpages/{code}/subs/{COLLEGE ID}`: create-only for the public, with a size limit and a College ID check in the rules; read and approve for staff. Approving writes the attendee into the event and sets the application to `approved`.
+- **Tickets.** The QR holds `CEM1:{event code}:{attendee id}`. The ticket page carries name and event in the link, so it needs no database.
+- **Clean-up on delete.** Deleting an event also deletes its `fin` document, its registration page and the applications under it (Firestore never removes sub-collections by itself).
+
+### Free-plan budget (Spark: 50,000 reads, 20,000 writes, 20,000 deletes per day)
+- Each organizer, manager or treasurer device adds one more listener per event (the `fin` document) and, when online registration is on, one listener on the applications. That is one read when it starts plus one per change.
+- Opening the public page is 1 read (the rules' event-exists check is billed as a read too). An application is 1 write plus a few rule reads. Approving is 1 write to the event and 1 to the application.
+- Attendee changes are one write each, as before. Seats-taken updates to the public page are one write per change.
+- A 500-person event with 500 applications is a few thousand operations in total, well inside one day's limits.
+
+### Rolling back
+Re-publish the 3.4.0 rules (they are in the repository history) and restore the 3.4.0 files. **Converted events keep their money data in `events/{id}/fin/data`**, which the 3.4.0 app does not read, so budgets look empty there until you copy those fields back into the event document by hand in the Firebase console. If you may need to go back, do not run the conversion (step 4) until you have tested.
+
+### Troubleshooting
+| What you see | Cause and fix |
+| --- | --- |
+| "No permission. Check the Firestore rules." right after the upgrade | The device runs an old app (3.4.0 or older). Refresh the website, install the new APK, and set `min` to `3.5.0`. |
+| Rules editor shows a red error and will not publish | The file was cut or edited. Paste the whole `firestore.rules` again. |
+| Treasurer or manager sees an empty budget | The event has not been converted yet. The organizer opens the event once (step 4). Check `events/{code}/fin/data` in the console. |
+| A member cannot add attendees after the upgrade | The attendee list is still the old list. The organizer or a manager opens the event once; it converts in a few seconds. |
+| The role drop-down does nothing, or "No permission" on role change | Only organizer and manager change roles, and a manager cannot change another manager or the owner. |
+| Online registration link says "unavailable" or "closed" | The page is switched off, the event day has passed, or the event was deleted. Open Attendees and check it says **Open**. |
+| "Set your public site address first" | Payments tab > Link settings > Site address (the APK needs it for registration and ticket links; `PAY_BASE` in `firebase-config.js` does the same). |
+| A person says their College ID "has already registered" | They applied before, or a team member added them. Find them under handled applications (Remove lets the same ID apply again) or in the attendee list. |
+| Scan tickets does nothing in the APK | The APK was built before 3.5.0, or the build skipped `patch-scanner.sh`. Rebuild; check that the workflow log shows "Add ticket scanner (Android)". Type the code in the box as a fallback. |
+| "Scanner problem" on first scan | Google's scanner component is still downloading or the phone has no Google Play services. Connect to the internet and tap Scan next ticket, or use the typing box. |
+| Camera does not start on the website | The browser blocked the camera or the site is not on https. Allow camera access, or type the ticket code. |
+| Break-even says "Add a budget or some costs" | Add budget categories or bills in Expenses, or switch the cost basis to Spent + to pay. |
